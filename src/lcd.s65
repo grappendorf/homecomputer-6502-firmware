@@ -1,0 +1,485 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; 4x40 LCD, two HD44780 controllers, 4-bit bus on VIA1 port A.
+; R/W is tied to GND, so every command is followed by a fixed delay.
+; PA7 is the LED. All port-A writes go through lcd_porta so that bit is kept.
+
+.include "io.inc65"
+
+.import delay_ms
+.import serio_resolve_dev
+.import serio_putc
+
+.segment "BSS"
+
+lcd_porta:   .res 1
+lcd_enable:  .res 1
+lcd_row:     .res 1
+lcd_col:     .res 1
+lcd_chr:     .res 1
+lcd_tmp:     .res 1
+lcd_buf:     .res 4*40
+lcd_mode:    .res 1
+
+.segment "CODE"
+
+.export lcd_init
+.export lcd_cls
+.export lcd_locate
+.export lcd_cursor
+.export lcd_blink
+.export lcd_display
+.export lcd_refresh
+.export lcd_buf
+.export lcd_row
+.export lcd_col
+.export lcd_porta
+.export lcd_poke
+.export lcd_scroll
+.export led_off
+.export led_set
+.export HCOUTCH
+
+; lcd_mode bits. The cursor is the HD44780 underline. Blink is the
+; controller flashing the character at the address counter.
+MODE_CUR   = $01
+MODE_BLINK = $02
+MODE_DISP  = $04
+
+lcd_init:
+        lda #$ff
+        sta VIA1_DDRA
+        ; Reset lamp. The timer IRQ clears it after one second.
+        lda #LCD_LED
+        sta lcd_porta
+        sta VIA1_ORA
+        lda #LCD_E1 | LCD_E2
+        sta lcd_enable
+        lda #15
+        jsr delay_ms
+        lda #$03
+        jsr write_nibble
+        lda #5
+        jsr delay_ms
+        lda #$03
+        jsr write_nibble
+        lda #1
+        jsr delay_ms
+        lda #$03
+        jsr write_nibble
+        lda #1
+        jsr delay_ms
+        lda #$02
+        jsr write_nibble
+        lda #1
+        jsr delay_ms
+        lda #$28
+        jsr command
+        lda #$0c
+        jsr command
+        lda #$06
+        jsr command
+        lda #$01
+        jsr command
+        ldx #0
+        lda #' '
+@clr:   sta lcd_buf,x
+        inx
+        cpx #160
+        bne @clr
+        lda #0
+        sta lcd_row
+        sta lcd_col
+        lda #MODE_CUR|MODE_DISP
+        sta lcd_mode
+        jsr load_cgram
+        jmp place
+
+; Chars 1..6, eight rows each, starting at CGRAM address 8.
+; write_data keeps neither A nor X.
+load_cgram:
+        lda #$48
+        jsr command
+        ldy #0
+@row:   lda cgram_bits,y
+        jsr write_data
+        iny
+        cpy #48
+        bne @row
+        lda #$78
+        jsr command
+        ldy #0
+@sup:   lda sup2_bits,y
+        jsr write_data
+        iny
+        cpy #8
+        bne @sup
+        rts
+
+cgram_bits:
+        .byte $11, $11, $11, $13, $0e, $10, $10, 0
+        .byte $02, $04, $08, 0, 0, 0, 0, 0
+        .byte $0e, $12, $10, $1e, $10, $12, $0e, 0
+        .byte $0e, $02, $06, $02, $0e, 0, 0, 0
+        .byte 0, $10, $08, $04, $02, $01, 0, 0
+        .byte 0, 0, $0a, $11, 0, 0, 0, 0
+sup2_bits:
+        .byte $0e, $02, $04, $08, $1e, 0, 0, 0
+
+; Clear PA7 in the shadow and on the pin. LCD lines stay as they are.
+; Only call this with IRQs masked: the timer handler, or inside write_nibble.
+led_off:
+        lda lcd_porta
+        and #$ff-LCD_LED
+        sta lcd_porta
+        sta VIA1_ORA
+        rts
+
+; A = 0 turns the lamp off, anything else turns it on. Stops the reset-lamp
+; timer, so a later tick cannot undo the new state. Preserves A, X and Y.
+led_set:
+        php
+        sei
+        pha
+        lda #%01000000
+        sta VIA1_IER
+        pla
+        pha
+        cmp #0
+        beq @clr
+        lda lcd_porta
+        ora #LCD_LED
+        bne @wr
+@clr:   lda lcd_porta
+        and #$ff-LCD_LED
+@wr:    sta lcd_porta
+        sta VIA1_ORA
+        pla
+        plp
+        rts
+
+; BASIC OUTDO calls this with the character in A. X and Y must survive.
+HCOUTCH:
+        sta lcd_chr
+        txa
+        pha
+        tya
+        pha
+        jsr serio_resolve_dev
+        cmp #2
+        beq @ser
+        lda lcd_chr
+        jsr lcd_out
+        jmp @out
+@ser:   lda lcd_chr
+        jsr serio_putc
+@out:   pla
+        tay
+        pla
+        tax
+        lda lcd_chr
+        rts
+
+lcd_out:
+        cmp #$0d
+        beq @cr
+        cmp #$0a
+        beq @lf
+        cmp #$08
+        beq @bs
+        cmp #LCD_SUP2
+        beq @glyph
+        cmp #LCD_EURO
+        beq @glyph
+        cmp #LCD_MU
+        bcc @plain
+        cmp #$03
+        beq @plain
+        cmp #LCD_TILDE+1
+        bcc @glyph
+@plain:
+        cmp #$20
+        bcc @done
+@glyph: jsr raw_put
+        inc lcd_col
+        lda lcd_col
+        cmp #40
+        bcc @done
+        lda #39
+        sta lcd_col
+        jmp set_addr
+@done:  rts
+@cr:    lda #0
+        sta lcd_col
+        jmp set_addr
+@lf:    inc lcd_row
+        lda lcd_row
+        cmp #4
+        bcc @down
+        dec lcd_row
+        jsr scroll
+@down:  lda #0
+        sta lcd_col
+        lda lcd_row
+        cmp #2
+        beq @swap
+        jmp set_addr
+@swap:  jmp place
+@bs:    lda lcd_col
+        beq @done
+        dec lcd_col
+        jsr set_addr
+        lda #' '
+        jsr raw_put
+        jmp set_addr
+
+; Write A at the current cursor and remember it. The address counter then
+; advances, which is the next column. lcd_col stays put.
+lcd_poke:
+raw_put:
+        pha
+        jsr buf_index
+        pla
+        sta lcd_buf,x
+        jmp write_data
+
+lcd_scroll:
+scroll:
+        ldx #0
+@mv:    lda lcd_buf+40,x
+        sta lcd_buf,x
+        inx
+        cpx #120
+        bne @mv
+        ldx #0
+        lda #' '
+@sp:    sta lcd_buf+120,x
+        inx
+        cpx #40
+        bne @sp
+        jmp lcd_refresh
+
+; Redraw the glass from lcd_buf. lcd_row and lcd_col stay the cursor.
+lcd_refresh:
+        lda lcd_row
+        pha
+        lda lcd_col
+        pha
+        lda #0
+        sta lcd_row
+@row:   lda #0
+        sta lcd_col
+        jsr set_addr
+        ldy #0
+@ch:    jsr buf_index
+        lda lcd_buf,x
+        jsr write_data
+        inc lcd_col
+        iny
+        cpy #40
+        bne @ch
+        inc lcd_row
+        lda lcd_row
+        cmp #4
+        bne @row
+        pla
+        sta lcd_col
+        pla
+        sta lcd_row
+        jmp place
+
+; Display control on both controllers, underline and blink only on the
+; active one, then the address counter on (lcd_row, lcd_col).
+place:
+        lda #LCD_E1 | LCD_E2
+        sta lcd_enable
+        ldy #0
+        jsr disp_cmd
+        jsr select_row
+        ldy #1
+        jsr disp_cmd
+        jmp set_addr
+
+; Address counter only. The caller stays on the same controller.
+set_addr:
+        jsr select_row
+        lda lcd_row
+        and #$01
+        beq @z
+        lda #$40
+        bne @addr
+@z:     lda #0
+@addr:  clc
+        adc lcd_col
+        ora #$80
+        jmp command
+
+select_row:
+        lda lcd_row
+        cmp #2
+        bcs @e2
+        lda #LCD_E1
+        bne @en
+@e2:    lda #LCD_E2
+@en:    sta lcd_enable
+        rts
+
+; Y = 0 forces the underline and the blink off. Otherwise both follow lcd_mode.
+; Display off is $08 either way.
+disp_cmd:
+        lda #$08
+        sta lcd_tmp
+        lda lcd_mode
+        and #MODE_DISP
+        beq @go
+        lda #$0c
+        sta lcd_tmp
+        cpy #0
+        beq @go
+        lda lcd_mode
+        and #MODE_CUR
+        beq @blink
+        lda lcd_tmp
+        ora #$02
+        sta lcd_tmp
+@blink: lda lcd_mode
+        and #MODE_BLINK
+        beq @go
+        lda lcd_tmp
+        ora #$01
+        sta lcd_tmp
+@go:    lda lcd_tmp
+        jmp command
+
+; A = row 0..3, X = column 0..39. The caller checks the range.
+lcd_locate:
+        sta lcd_row
+        stx lcd_col
+        jmp place
+
+lcd_cls:
+        lda #LCD_E1 | LCD_E2
+        sta lcd_enable
+        lda #$01
+        jsr command
+        ldx #0
+        lda #' '
+@c:     sta lcd_buf,x
+        inx
+        cpx #160
+        bne @c
+        lda #0
+        sta lcd_row
+        sta lcd_col
+        jmp place
+
+; A = 0 turns that flag off, anything else turns it on.
+lcd_cursor:
+        cmp #0
+        beq @off
+        lda lcd_mode
+        ora #MODE_CUR
+        bne @go
+@off:   lda lcd_mode
+        and #$ff-MODE_CUR
+@go:    sta lcd_mode
+        jmp place
+
+lcd_blink:
+        cmp #0
+        beq @off
+        lda lcd_mode
+        ora #MODE_BLINK
+        bne @go
+@off:   lda lcd_mode
+        and #$ff-MODE_BLINK
+@go:    sta lcd_mode
+        jmp place
+
+lcd_display:
+        cmp #0
+        beq @off
+        lda lcd_mode
+        ora #MODE_DISP
+        bne @go
+@off:   lda lcd_mode
+        and #$ff-MODE_DISP
+@go:    sta lcd_mode
+        jmp place
+
+; X = lcd_row*40 + lcd_col. Clobbers A.
+buf_index:
+        lda lcd_row
+        asl
+        asl
+        asl
+        sta lcd_tmp
+        asl
+        asl
+        clc
+        adc lcd_tmp
+        clc
+        adc lcd_col
+        tax
+        rts
+
+command:
+        pha
+        lda lcd_porta
+        and #($ff - LCD_RS)
+        sta lcd_porta
+        pla
+        pha
+        jsr send
+        pla
+        cmp #$03
+        bcs @short
+        lda #2
+        jsr delay_ms
+@short: rts
+
+write_data:
+        pha
+        lda lcd_porta
+        ora #LCD_RS
+        sta lcd_porta
+        pla
+        jmp send
+
+send:
+        pha
+        lsr
+        lsr
+        lsr
+        lsr
+        jsr write_nibble
+        pla
+        and #$0f
+        jmp write_nibble
+
+; A = low nibble. RS and the LED stay as they are in lcd_porta.
+; The enable pulse is atomic so the timer IRQ cannot rewrite PA7 mid-strobe.
+write_nibble:
+        and #$0f
+        sta lcd_tmp
+        php
+        sei
+        lda lcd_porta
+        and #$f0
+        and #($ff - LCD_E_MASK)
+        ora lcd_tmp
+        sta VIA1_ORA
+        sta lcd_porta
+        ora lcd_enable
+        sta VIA1_ORA
+        sta lcd_porta
+        and #($ff - LCD_E_MASK)
+        sta VIA1_ORA
+        sta lcd_porta
+        plp
+        ldx #20
+@wait:  dex
+        bne @wait
+        rts

@@ -1,0 +1,10 @@
+; Status from disk_read. Same values in src/disk.s65.
+DISK_LINE = 0
+DISK_EOF  = 1
+DISK_NF   = 2
+DISK_EJ   = 3
+DISK_BRK  = 4
+DISK_LONG = 5
+DISK_TO   = 6
+DISK_FOUND = 7
+DISK_SIZE  = 8

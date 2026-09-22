@@ -1,0 +1,42 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; Reset enters Microsoft BASIC. The LCD and keyboard are the BASIC console.
+; VIA1 timer 1 runs for one second to turn the reset lamp off.
+; VIA2 timer 1 runs the SID player.
+
+.import INIT
+.import lcd_init
+.import kb_init
+.import sid_init
+.import irq_init
+.import irq
+.import mon_init
+
+.segment "CODE"
+
+reset:
+        sei
+        cld
+        ldx #$ff
+        txs
+        lda #0
+        tax
+@zp:    sta $00,x
+        inx
+        bne @zp
+        jsr lcd_init
+        jsr kb_init
+        jsr sid_init
+        jsr irq_init
+        jsr mon_init
+        cli
+        jmp INIT
+
+nmi:    rti
+
+.segment "VECTORS"
+        .addr nmi
+        .addr reset
+        .addr irq

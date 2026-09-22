@@ -1,0 +1,382 @@
+; RAID. Canyon run on the 4x40 LCD.
+; examples/build.sh writes raid.prg. LOAD "raid" then RUN.
+; Up and down stay in the gap. Q returns to BASIC.
+
+.include "../src/kernal.inc65"
+.include "../src/io.inc65"
+
+SHIP_COL = 2
+
+.segment "LOAD"
+        .word PRG_ORG
+
+.segment "CODE"
+
+        .word stub_end
+        .word 10
+        .byte SYS_TK
+        .byte "1101"
+        .byte 0
+stub_end:
+        .word 0
+.assert * = 1101, error, "SYS address is not 1101"
+
+entry:
+        lda #0
+        jsr API_CURSOR
+        jsr API_QUIET
+        jsr API_CLS
+        lda #0
+        ldx #16
+        jsr API_LOCATE
+        lda #<t_raid
+        ldy #>t_raid
+        jsr print
+        lda #1
+        ldx #10
+        jsr API_LOCATE
+        lda #<t_dodge
+        ldy #>t_dodge
+        jsr print
+        lda #2
+        ldx #8
+        jsr API_LOCATE
+        lda #<t_keys
+        ldy #>t_keys
+        jsr print
+        lda #3
+        ldx #12
+        jsr API_LOCATE
+        lda #<t_go
+        ldy #>t_go
+        jsr print
+        jsr waitkey
+        jsr init
+@loop:  jsr scroll
+        jsr drift
+        jsr newcol
+        jsr keys
+        bcs @quit
+        jsr hit
+        bcs @dead
+        jsr draw
+        jsr tick
+        lda speed
+        jsr API_DELAY
+        jmp @loop
+@quit:  jmp leave
+@dead:  lda #2
+        jsr API_EFFECT
+        jsr API_CLS
+        lda #1
+        ldx #0
+        jsr API_LOCATE
+        lda #<t_crash
+        ldy #>t_crash
+        jsr print
+        jsr prnum
+        lda #2
+        ldx #0
+        jsr API_LOCATE
+        lda #<t_key
+        ldy #>t_key
+        jsr print
+        jsr waitkey
+leave:  jsr API_QUIET
+        jsr API_CLS
+        lda #1
+        jsr API_CURSOR
+        rts
+
+init:   ldx #0
+        lda #' '
+@c:     sta buf,x
+        inx
+        cpx #160
+        bne @c
+        lda #1
+        sta ship
+        sta gap
+        sta prev
+        lda #0
+        sta calm
+        lda #100
+        sta speed
+        lda #0
+        sta score
+        sta score+1
+        lda VIA2_T1CL
+        ora VIA2_T1CH
+        bne @s
+        lda #$a7
+@s:     sta seed
+        rts
+
+scroll: lda #0
+        sta row
+@r:     lda #0
+        sta col
+@c:             lda col
+        clc
+        adc #1
+        jsr cellx
+        lda buf,x
+        pha
+        lda col
+        jsr cellx
+        pla
+        sta buf,x
+        inc col
+        lda col
+        cmp #39
+        bne @c
+        inc row
+        lda row
+        cmp #4
+        bne @r
+        rts
+
+; The gap moves at most every third column. The column where it moves
+; is open over the old and the new gap, so the way through is wider.
+drift:  lda gap
+        sta prev
+        lda calm
+        beq @roll
+        dec calm
+        rts
+@roll:  jsr rnd
+        and #3
+        beq @up
+        cmp #1
+        beq @down
+        rts
+@up:    lda gap
+        beq @stay
+        dec gap
+        jmp @moved
+@down:  lda gap
+        cmp #2
+        bcs @stay
+        inc gap
+@moved: lda #2
+        sta calm
+@stay:  rts
+
+; Rows lo..hi are open. lo = min(gap, prev), hi = max(gap, prev) + 1.
+newcol: lda gap
+        cmp prev
+        bcc @lo
+        lda prev
+@lo:    sta lo
+        lda gap
+        cmp prev
+        bcs @hi
+        lda prev
+@hi:    clc
+        adc #1
+        sta hi
+        lda #0
+        sta row
+@r:     lda row
+        cmp lo
+        bcc @wall
+        cmp hi
+        beq @open
+        bcs @wall
+@open:  lda #' '
+        bne @put
+@wall:  lda #'#'
+@put:   pha
+        lda #39
+        jsr cellx
+        pla
+        sta buf,x
+        inc row
+        lda row
+        cmp #4
+        bne @r
+        rts
+
+keys:   jsr API_KEY
+        cmp #$13
+        beq @up
+        cmp #$14
+        beq @down
+        cmp #'Q'
+        beq @quit
+        cmp #'q'
+        beq @quit
+        clc
+        rts
+@up:    lda ship
+        beq @ok
+        dec ship
+@ok:    clc
+        rts
+@down:  lda ship
+        cmp #3
+        beq @ok
+        inc ship
+        clc
+        rts
+@quit:  sec
+        rts
+
+hit:    lda ship
+        sta row
+        lda #SHIP_COL
+        jsr cellx
+        lda buf,x
+        cmp #'#'
+        beq @yes
+        clc
+        rts
+@yes:   sec
+        rts
+
+draw:   lda #0
+        sta row
+@r:     lda row
+        ldx #0
+        jsr API_LOCATE
+        lda #0
+        sta col
+@c:     lda col
+        jsr cellx
+        lda buf,x
+        ldx row
+        cpx ship
+        bne @ch
+        ldx col
+        cpx #SHIP_COL
+        bne @ch
+        lda #'>'
+@ch:    jsr API_POKE
+        inc col
+        lda col
+        cmp #40
+        bne @c
+        inc row
+        lda row
+        cmp #4
+        bne @r
+        rts
+
+tick:   inc score
+        bne @nz
+        inc score+1
+@nz:    lda score
+        and #$1f
+        bne @done
+        lda speed
+        cmp #40
+        bcc @done
+        sec
+        sbc #4
+        sta speed
+@done:  rts
+
+; A = column, row is set. X = index into buf. Clobbers A and tmp2.
+cellx:  sta tmp2
+        lda row
+        asl
+        asl
+        asl
+        sta tmp
+        asl
+        asl
+        clc
+        adc tmp
+        clc
+        adc tmp2
+        tax
+        rts
+
+rnd:    lda seed
+        asl
+        eor seed
+        sta seed
+        lsr
+        eor seed
+        sta seed
+        asl
+        asl
+        eor seed
+        sta seed
+        rts
+
+waitkey:
+@up:    jsr API_KEY
+        bne @up
+@down:  jsr API_KEY
+        beq @down
+        rts
+
+; Cursor already placed. A = low, Y = high of a zero-terminated string.
+print:  sta @ld+1
+        sty @ld+2
+        ldx #0
+@p:
+@ld:    lda $ffff,x
+        beq @d
+        stx tmp
+        jsr API_POKE
+        ldx tmp
+        inx
+        bne @p
+@d:     rts
+
+prnum:  lda score
+        sta num
+        lda score+1
+        sta num+1
+        ldy #0
+@dig:   lda #0
+        sta tmp
+@sub:   sec
+        lda num
+        sbc pow10,y
+        sta tmp2
+        lda num+1
+        sbc pow10+1,y
+        bcc @emit
+        sta num+1
+        lda tmp2
+        sta num
+        inc tmp
+        jmp @sub
+@emit:  lda tmp
+        clc
+        adc #'0'
+        jsr API_POKE
+        iny
+        iny
+        cpy #10
+        bne @dig
+        rts
+
+t_raid: .byte "RAID",0
+t_dodge:.byte "DODGE THE WALLS",0
+t_keys: .byte "UP / DOWN    Q QUIT",0
+t_go:   .byte "PRESS A KEY",0
+t_crash:.byte "CRASH  SCORE ",0
+t_key:  .byte "PRESS A KEY",0
+pow10:  .word 10000, 1000, 100, 10, 1
+
+.segment "VARS"
+
+buf:    .res 160
+row:    .res 1
+col:    .res 1
+tmp:    .res 1
+tmp2:   .res 1
+ship:   .res 1
+gap:    .res 1
+prev:   .res 1
+calm:   .res 1
+lo:     .res 1
+hi:     .res 1
+speed:  .res 1
+score:  .res 2
+num:    .res 2
+seed:   .res 1

@@ -1,0 +1,26 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; Jump table for programs loaded at TXTTAB ($0441). One JMP per entry, in the
+; order of the addresses in kernal.inc65. The segment starts at $FF80.
+
+.import lcd_cls
+.import lcd_locate
+.import lcd_poke
+.import lcd_cursor
+.import kb_poll
+.import delay_ms
+.import sid_quiet
+.import sid_effect
+
+.segment "KERNAL"
+
+        jmp lcd_cls
+        jmp lcd_locate
+        jmp lcd_poke
+        jmp lcd_cursor
+        jmp kb_poll
+        jmp delay_ms
+        jmp sid_quiet
+        jmp sid_effect

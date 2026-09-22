@@ -1,0 +1,77 @@
+; Scratch above Microsoft BASIC's zero page ($00-$96).
+; $97-$C1 is the serial monitor. $C2-$CE is the serial disk.
+; $CF is the LIST pager. Serial-BASIC flags live in serio BSS.
+; $D0/$D2 are the SID player's pointers.
+; $FF is BASIC's LOFBUF.
+
+mon_buf   = $0097
+mon_len   = $00B7
+mon_st    = $00B8
+mon_sub   = $00B9
+mon_n     = $00BA
+mon_cnt   = $00BB
+mon_nib   = $00BC
+mon_go    = $00BD
+mon_idx   = $00BE
+mon_hlp   = $00BF
+mon_eol   = $00C0
+mon_burst = $00C1
+
+mon_disk  = $00C2
+disk_busy = $00C3
+disk_len  = $00C4
+disk_load = $00C5
+disk_hold = $00C6
+disk_nlen = $00C7
+disk_prv  = $00C8
+disk_prx  = $00C9
+disk_row  = $00CA
+disk_pos  = $00CB
+disk_all  = $00CD
+
+; LIST pages by LCD row, not by program line. 1 while LIST is drawing.
+list_on   = $00CF
+
+sid_ptr   = $00D0
+sid_src   = $00D2
+
+sleep_lo  = $00D4
+sleep_mid = $00D5
+sleep_hi  = $00D6
+led_ticks = $00D7
+kb_mod    = $00D8
+kb_code   = $00D9
+kb_last   = $00DA
+kb_rept   = $00DB
+kb_tmp    = $00DC
+kb_cols   = $00DD
+sid_tmp   = $00DE
+sid_hold  = $00DF
+; First byte after a PRG's BASIC stub. 0 means the text runs up to VARTAB.
+basic_end = $00E3
+tempo_n   = $00E1
+sid_arg   = $00E2
+sid_fclo  = $00E6
+sid_fchi  = $00E7
+sid_res   = $00E8
+
+ed_cur    = $00E9
+ed_len    = $00EA
+ed_dirty  = $00EB
+ed_over   = $00EC
+ed_input  = $00ED
+ed_ptr    = $00EE
+ed_cap    = $00F0
+ed_y      = $00F1
+ed_chr    = $00F2
+ed_tmp    = $00F3
+ed_orow   = $00F4
+ed_ocol   = $00F5
+ed_from   = $00F6
+ed_mark   = $00F7
+
+; Monitor JMP vector in ZP so NMOS JMP (indirect) never hits the $xxFF bug.
+mon_goad  = $00F8
+mon_a     = $00FA
+mon_b     = $00FC
+mon_t     = $00FE

@@ -1,0 +1,627 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; Serial BASIC console. The host sends *BASIC and the monitor steps aside.
+; Default PRINT/INPUT then use the ACIA. #1 is the LCD and keyboard, #2 is
+; this port. QUIT returns the line to the monitor. The 6551 does not report
+; the host window; ser_cols/ser_rows are the logical size (start 80x24).
+
+.include "io.inc65"
+.include "zp.inc65"
+
+RING = 48
+
+.segment "BSS"
+
+.export mon_basic
+.export io_def
+.export ser_cols
+.export ser_rows
+.export ser_row
+.export ser_col
+.export ser_hello
+.export ser_lim
+.export CHANNL
+
+mon_basic: .res 1
+io_def:    .res 1
+ser_cols:  .res 1
+ser_rows:  .res 1
+ser_row:   .res 1
+ser_col:   .res 1
+ser_ncm:   .res 1
+ser_lim:   .res 1
+ser_hello: .res 1
+ser_last:  .res 1
+ser_head:  .res 1
+ser_tail:  .res 1
+CHANNL:    .res 1
+ed_ser:    .res 1
+ed_sidx:   .res 1
+ser_parm:  .res 1
+ser_buf:   .res RING
+
+.segment "CODE"
+
+.import delay_ms
+
+.export serio_init
+.export serio_try_mount
+.export serio_quit
+.export serio_irq_rx
+.export serio_resolve_dev
+.export serio_is_serial
+.export serio_cur_linwid
+.export serio_comma_lim
+.export serio_recalc_ncm
+.export serio_putc
+.export serio_inch
+.export serio_key
+.export serio_cntc
+.export ed_ser
+.export ed_sidx
+.export serio_cuu
+.export serio_cud
+.export serio_cha
+.export serio_ansi_cls
+.export serio_ansi_locate
+.export serio_ansi_cursor
+
+serio_init:
+        lda #0
+        sta mon_basic
+        sta ser_hello
+        sta ed_ser
+        sta ed_sidx
+        sta ser_row
+        sta ser_col
+        sta ser_head
+        sta ser_tail
+        sta ser_last
+        sta CHANNL
+        lda #1
+        sta io_def
+        lda #80
+        sta ser_cols
+        lda #24
+        sta ser_rows
+        jmp serio_recalc_ncm
+
+; Monitor parsed a line. C=1 if it was *BASIC (already answered).
+serio_try_mount:
+        lda mon_disk
+        bne @no
+        lda mon_len
+        cmp #6
+        bne @no
+        ldx #5
+@c:     lda mon_buf,x
+        cmp basic_txt,x
+        bne @no
+        dex
+        bpl @c
+        lda #1
+        sta mon_basic
+        sta ser_hello
+        lda #2
+        sta io_def
+        lda #0
+        sta CHANNL
+        sta ser_row
+        sta ser_col
+        sta ser_head
+        sta ser_tail
+        sta ser_last
+        sta mon_st
+        jsr send_ok
+        sec
+        rts
+@no:    clc
+        rts
+
+; Called from BASIC QUIT. Monitor prompt goes out on the ACIA.
+serio_quit:
+        lda #0
+        sta mon_basic
+        sta ser_hello
+        sta CHANNL
+        sta ser_head
+        sta ser_tail
+        sta mon_len
+        sta mon_st
+        sta mon_eol
+        lda #1
+        sta io_def
+        lda #ACIA_CMD_ON
+        sta ACIA_CMD
+        ldx #0
+@b:     lda banner,x
+        beq @rts
+        jsr serio_putc
+        inx
+        bne @b
+@rts:   rts
+
+; Up to 16 received bytes, mounted, mainline is not polling the data register.
+serio_irq_rx:
+        ldx #16
+@rx:    lda ACIA_STAT
+        and #ACIA_RX
+        beq @rts
+        lda ACIA_DATA
+        jsr ring_put
+        dex
+        bne @rx
+@rts:   rts
+
+; A = 1 LCD, 2 serial. CHANNL 0 follows io_def while serial BASIC is up.
+serio_resolve_dev:
+        lda CHANNL
+        beq @def
+        cmp #2
+        bne @lcd
+        lda mon_basic
+        beq @lcd
+        lda #2
+        rts
+@lcd:   lda #1
+        rts
+@def:   lda mon_basic
+        beq @lcd
+        lda io_def
+        cmp #2
+        beq @ser
+        lda #1
+        rts
+@ser:   lda #2
+        rts
+
+; Z=1 when the current statement targets the serial port.
+serio_is_serial:
+        jsr serio_resolve_dev
+        cmp #2
+        rts
+
+; A = columns for the current output device.
+serio_cur_linwid:
+        jsr serio_is_serial
+        beq @ser
+        lda #40
+        rts
+@ser:   lda ser_cols
+        rts
+
+; ser_lim = comma-field limit for the current device.
+serio_comma_lim:
+        jsr serio_is_serial
+        beq @ser
+        lda #30
+        sta ser_lim
+        rts
+@ser:   lda ser_ncm
+        sta ser_lim
+        rts
+
+; ser_ncm = ((ser_cols/10)-1)*10, or 0 when narrower than one field.
+serio_recalc_ncm:
+        lda ser_cols
+        ldx #0
+@d:     cmp #10
+        bcc @q
+        sbc #10
+        inx
+        bcs @d
+@q:     dex
+        bmi @z
+        txa
+        asl
+        sta ser_ncm
+        asl
+        asl
+        clc
+        adc ser_ncm
+        sta ser_ncm
+        rts
+@z:     lda #0
+        sta ser_ncm
+        rts
+
+tx_raw:
+        pha
+@w:     lda ACIA_STAT
+        and #ACIA_TX
+        beq @w
+        pla
+        sta ACIA_DATA
+        rts
+
+serio_putc:
+        jsr tx_raw
+        cmp #$0d
+        beq @cr
+        cmp #$0a
+        beq @lf
+        cmp #$08
+        beq @bs
+        cmp #$20
+        bcc @rts
+        inc ser_col
+@rts:   rts
+@cr:    lda #0
+        sta ser_col
+        rts
+@lf:    inc ser_row
+        lda ser_row
+        cmp ser_rows
+        bcc @rts
+        lda ser_rows
+        beq @rts
+        sec
+        sbc #1
+        sta ser_row
+        rts
+@bs:    lda ser_col
+        beq @rts
+        dec ser_col
+        rts
+
+; Blocking. A swallowed LF after CR is not returned. X and Y are kept.
+serio_inch:
+        txa
+        pha
+        tya
+        pha
+@again: jsr ring_get
+        cmp #$0a
+        bne @keep
+        ldx ser_last
+        cpx #$0d
+        beq @again
+@keep:  sta ser_last
+        sta ser_lim
+        pla
+        tay
+        pla
+        tax
+        lda ser_lim
+        rts
+
+; One editor key. ANSI cursor keys become the ED_* codes in io.inc65.
+; DEL ($7F) is backspace. A lone ESC (no sequence within 20 ms) stays ESC.
+; X and Y are kept. Unknown sequences return 0.
+serio_key:
+        txa
+        pha
+        tya
+        pha
+        jsr ring_get
+        cmp #$1b
+        beq @esc
+        cmp #$7f
+        bne @nl
+        lda #$08
+        jmp @keep
+@nl:    cmp #$0d
+        beq @eol
+        cmp #$0a
+        bne @keep
+@eol:   sta ser_lim
+        lda ser_head
+        cmp ser_tail
+        beq @eolr
+        ldx ser_tail
+        lda ser_buf,x
+        cmp #$0d
+        beq @eat
+        cmp #$0a
+        bne @eolr
+@eat:   inx
+        cpx #RING
+        bcc @adv
+        ldx #0
+@adv:   stx ser_tail
+@eolr:  lda ser_lim
+@keep:  sta ser_lim
+        pla
+        tay
+        pla
+        tax
+        lda ser_lim
+        rts
+@esc:   jsr key_wait
+        bcs @isesc
+        cmp #'['
+        beq @csi
+        cmp #'O'
+        beq @ss3
+@isesc: lda #$1b
+        jmp @keep
+@ss3:   jsr ring_get
+        jmp @letter
+@csi:   lda #0
+        sta ser_parm
+        ldx #8
+@csi1:  jsr ring_get
+        cmp #';'
+        beq @lock
+        cmp #'0'
+        bcc @letter
+        cmp #':'
+        bcs @letter
+        bit ser_parm
+        bmi @next
+        jsr parm_digit
+@next:  dex
+        bne @csi1
+        lda #0
+        jmp @keep
+@lock:  lda ser_parm
+        ora #$80
+        sta ser_parm
+        jmp @next
+@letter:
+        cmp #'~'
+        beq @tilde
+        cmp #'A'
+        bne @nb
+        lda #ED_UP
+        jmp @keep
+@nb:    cmp #'B'
+        bne @nc
+        lda #ED_DOWN
+        jmp @keep
+@nc:    cmp #'C'
+        bne @nd
+        lda #ED_RIGHT
+        jmp @keep
+@nd:    cmp #'D'
+        bne @nh
+        lda #ED_LEFT
+        jmp @keep
+@nh:    cmp #'H'
+        bne @nf
+        lda #ED_HOME
+        jmp @keep
+@nf:    cmp #'F'
+        bne @zero
+        lda #ED_END
+        jmp @keep
+@zero:  lda #0
+        jmp @keep
+@tilde: lda ser_parm
+        and #$7f
+        cmp #1
+        beq @home
+        cmp #7
+        beq @home
+        cmp #2
+        bne @ndel
+        lda #ED_INS
+        jmp @keep
+@ndel:  cmp #3
+        bne @nend
+        lda #ED_DEL
+        jmp @keep
+@nend:  cmp #4
+        bne @zero
+        lda #ED_END
+        jmp @keep
+@home:  lda #ED_HOME
+        jmp @keep
+
+; Carry set: nothing arrived within 20 ms.
+key_wait:
+        ldy #20
+@w:     lda ser_head
+        cmp ser_tail
+        bne @got
+        lda #1
+        jsr delay_ms
+        dey
+        bne @w
+        sec
+        rts
+@got:   jsr ring_get
+        clc
+        rts
+
+; ser_parm = ser_parm * 10 + digit. Bit 7 stays clear. A = '0'..'9'.
+parm_digit:
+        and #$0f
+        sta ser_last
+        lda ser_parm
+        asl
+        asl
+        clc
+        adc ser_parm
+        asl
+        clc
+        adc ser_last
+        sta ser_parm
+        rts
+
+; Z=1 if the next queued byte is Ctrl+C. That byte is consumed.
+serio_cntc:
+        lda ser_head
+        cmp ser_tail
+        beq @no
+        ldx ser_tail
+        lda ser_buf,x
+        cmp #$03
+        bne @no
+        inx
+        cpx #RING
+        bcc @adv
+        ldx #0
+@adv:   stx ser_tail
+        lda #0
+        rts
+@no:    lda #1
+        rts
+
+; ESC [ 2 J  ESC [ H . Logical cursor 0,0.
+; Escape bytes go out raw so they do not move ser_row/ser_col.
+serio_ansi_cls:
+        lda #$1b
+        jsr tx_raw
+        lda #'['
+        jsr tx_raw
+        lda #'2'
+        jsr tx_raw
+        lda #'J'
+        jsr tx_raw
+        lda #$1b
+        jsr tx_raw
+        lda #'['
+        jsr tx_raw
+        lda #'H'
+        jsr tx_raw
+        lda #0
+        sta ser_row
+        sta ser_col
+        rts
+
+; A = row, X = column, both 0-based. Cursor addressing is 1-based.
+serio_ansi_locate:
+        sta ser_row
+        stx ser_col
+        lda #$1b
+        jsr tx_raw
+        lda #'['
+        jsr tx_raw
+        lda ser_row
+        clc
+        adc #1
+        jsr put_dec
+        lda #';'
+        jsr tx_raw
+        lda ser_col
+        clc
+        adc #1
+        jsr put_dec
+        lda #'H'
+        jmp tx_raw
+
+; A = 0 hide, nonzero show. DEC private mode 25.
+serio_ansi_cursor:
+        pha
+        lda #$1b
+        jsr tx_raw
+        lda #'['
+        jsr tx_raw
+        lda #'?'
+        jsr tx_raw
+        lda #'2'
+        jsr tx_raw
+        lda #'5'
+        jsr tx_raw
+        pla
+        beq @off
+        lda #'h'
+        jmp tx_raw
+@off:   lda #'l'
+        jmp tx_raw
+
+; A = rows. ESC [ n A / B. A = 1-based column for CHA (ESC [ n G).
+serio_cuu:
+        ldx #'A'
+        bne ansi_n
+serio_cud:
+        ldx #'B'
+        bne ansi_n
+serio_cha:
+        ldx #'G'
+ansi_n:
+        pha
+        txa
+        pha
+        lda #$1b
+        jsr tx_raw
+        lda #'['
+        jsr tx_raw
+        tsx
+        lda $0102,x
+        jsr put_dec
+        pla
+        tax
+        pla
+        txa
+        jmp tx_raw
+
+; A = 1..255. No leading zeros.
+put_dec:
+        ldx #0
+@h:     cmp #100
+        bcc @tens
+        sbc #100
+        inx
+        bne @h
+@tens:  pha
+        cpx #0
+        beq @td
+        txa
+        ora #$30
+        jsr tx_raw
+        ldx #$ff
+@td:    pla
+        ldy #0
+@d:     cmp #10
+        bcc @one
+        sbc #10
+        iny
+        bne @d
+@one:   pha
+        cpy #0
+        bne @pt
+        cpx #$ff
+        bne @ones
+@pt:    tya
+        ora #$30
+        jsr tx_raw
+@ones:  pla
+        ora #$30
+        jmp tx_raw
+
+; A = byte. Dropped when the ring is full.
+ring_put:
+        ldx ser_head
+        inx
+        cpx #RING
+        bcc @wrap
+        ldx #0
+@wrap:  cpx ser_tail
+        beq @drop
+        ldy ser_head
+        sta ser_buf,y
+        stx ser_head
+@drop:  rts
+
+ring_get:
+        lda ser_head
+        cmp ser_tail
+        beq ring_get
+        ldx ser_tail
+        lda ser_buf,x
+        inx
+        cpx #RING
+        bcc @adv
+        ldx #0
+@adv:   stx ser_tail
+        rts
+
+send_ok:
+        ldx #0
+@p:     lda ok_txt,x
+        beq @d
+        jsr serio_putc
+        inx
+        bne @p
+@d:     rts
+
+basic_txt:
+        .byte "*BASIC"
+ok_txt:
+        .byte "*OK",$0d,$0a,0
+banner:
+        .byte $0d,$0a,"MON 6502",$0d,$0a,"*",0

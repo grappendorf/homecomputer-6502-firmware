@@ -1,0 +1,22 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; Fixed entries at $FF80. The order is the jump table in kernal.s65.
+; A, X and Y are clobbered unless the note says otherwise.
+
+API_CLS    = $FF80 ; clear the LCD
+API_LOCATE = $FF83 ; A = row 0..3, X = column 0..39
+API_POKE   = $FF86 ; A = character. The LCD address advances, lcd_col does not.
+API_CURSOR = $FF89 ; A = 0 off, anything else underline on
+API_KEY    = $FF8C ; A = ASCII or 0. X and Y survive.
+API_DELAY  = $FF8F ; A = milliseconds
+API_QUIET  = $FF92 ; close all SID gates
+API_EFFECT = $FF95 ; A = 1..9, see sid_effect
+
+; BASIC keyword token for SYS. Must match RESLST in msbasic/m6502.s65.
+SYS_TK = $AD
+
+; First byte of a BASIC program. RAMLOC is $0440; INIT leaves a 0 there
+; and sets TXTTAB to $0441.
+PRG_ORG = $0441

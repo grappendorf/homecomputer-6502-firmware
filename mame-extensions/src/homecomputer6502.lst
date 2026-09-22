@@ -1,0 +1,12 @@
+// license:MIT
+// copyright-holders:Dirk Grappendorf
+/*******************************************************************************
+
+    homecomputer6502.lst
+
+    Driver list for the homecomputer6502 subtarget.
+
+*******************************************************************************/
+
+@source:homecomputer6502/homecomputer6502.cpp
+homecomputer6502

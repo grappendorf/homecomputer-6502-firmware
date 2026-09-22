@@ -1,0 +1,687 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; Serial floppy. The host program (tools/disk/disk.rb) sends *DISK and the
+; monitor steps aside. BASIC then speaks the old line protocol:
+;   *DIR / *LOAD "name" / *SAVE "name" ... *EOF / !NOTFOUND
+; A machine-code file is announced with *PRG and then raw bytes: two-byte
+; load address, then the image. *EJECT, or a dead host during a transfer,
+; returns to the monitor.
+; The 6551 holds one received byte. While a command runs, RX IRQ is off and
+; the main loop polls. While idle, the IRQ watches for *EJECT and *DISK.
+
+.include "io.inc65"
+.include "zp.inc65"
+
+BUF = $0200
+
+.include "disk.inc65"
+
+.import lcd_locate
+.import lcd_row
+.import HCOUTCH
+.import mon_basic
+
+.segment "BSS"
+
+disk_bad: .res 1
+
+.segment "CODE"
+
+.export disk_init
+.export disk_try_mount
+.export disk_rx
+.export disk_begin
+.export disk_end
+.export disk_unmount
+.export disk_putc
+.export disk_crlf
+.export disk_read
+.export disk_mounted
+.export disk_key
+.export disk_hit_brk
+.export disk_show
+.export disk_take_size
+.export disk_nl
+.export disk_getc
+.export disk_bad
+
+disk_init:
+        lda #0
+        sta mon_disk
+        sta disk_busy
+        sta disk_len
+        sta disk_load
+        sta disk_hold
+        sta disk_nlen
+        sta disk_prx
+        sta disk_bad
+        rts
+
+; Monitor parsed a line. C=1 if it was *DISK (already answered).
+disk_try_mount:
+        lda mon_basic
+        bne @no
+        lda mon_len
+        cmp #5
+        bne @no
+        ldx #4
+@c:     lda mon_buf,x
+        cmp mount_txt,x
+        bne @no
+        dex
+        bpl @c
+        lda #1
+        sta mon_disk
+        lda #0
+        sta disk_busy
+        sta disk_load
+        sta disk_hold
+        sta disk_len
+        sta disk_prx
+        sta mon_st
+        jsr send_ok
+        sec
+        rts
+@no:    clc
+        rts
+
+; One byte from the IRQ, disk mounted, command not running.
+disk_rx:
+        cmp #$0a
+        beq @eol
+        cmp #$0d
+        beq @eol
+        ldx disk_len
+        cpx #8
+        bcs @rts
+        sta mon_buf,x
+        inx
+        stx disk_len
+@rts:   rts
+@eol:   lda disk_len
+        cmp #6
+        beq @ej
+        cmp #5
+        beq @re
+        jmp @clr
+@ej:    ldx #5
+@ejc:   lda mon_buf,x
+        cmp eject_txt,x
+        bne @clr
+        dex
+        bpl @ejc
+        jsr disk_unmount
+        rts
+@re:    ldx #4
+@rec:   lda mon_buf,x
+        cmp mount_txt,x
+        bne @clr
+        dex
+        bpl @rec
+        jsr send_ok
+@clr:   lda #0
+        sta disk_len
+        rts
+
+disk_begin:
+        lda #1
+        sta disk_busy
+        lda #ACIA_CMD_POLL
+        sta ACIA_CMD
+        lda ACIA_STAT
+        and #ACIA_RX
+        beq @no
+        lda ACIA_DATA
+@no:    rts
+
+disk_flush_rx:
+        lda #0
+        sta disk_prx
+@fl:    lda ACIA_STAT
+        and #ACIA_RX
+        beq @done
+        lda ACIA_DATA
+        jmp @fl
+@done:  lda #0
+        sta disk_len
+        rts
+
+disk_end:
+        lda #0
+        sta disk_busy
+        jsr disk_flush_rx
+        lda #ACIA_CMD_ON
+        sta ACIA_CMD
+        rts
+
+disk_unmount:
+        lda mon_disk
+        beq @rts
+        lda #0
+        sta mon_disk
+        sta disk_busy
+        sta disk_load
+        sta disk_hold
+        sta disk_len
+        sta disk_prx
+        sta mon_len
+        sta mon_st
+        sta mon_eol
+        lda #ACIA_CMD_ON
+        sta ACIA_CMD
+        ldx #0
+@b:     lda banner,x
+        beq @rts
+        jsr disk_putc
+        inx
+        bne @b
+@rts:   rts
+
+disk_mounted:
+        lda mon_disk
+        bne @on
+        lda mon_basic
+@on:    rts
+
+; Host answers as soon as it sees CR. The 6551 keeps one RX byte, so that
+; byte is latched here while TX of LF is still shifting. disk_getc takes it.
+disk_putc:
+        pha
+@w:     lda disk_prx
+        bne @tx
+        lda ACIA_STAT
+        and #ACIA_RX
+        beq @tx
+        lda ACIA_DATA
+        sta disk_prv
+        lda #1
+        sta disk_prx
+@tx:    lda ACIA_STAT
+        and #ACIA_TX
+        beq @w
+        pla
+        sta ACIA_DATA
+        rts
+
+; Only CR. A CRLF often arrives as two reads, and the host treats each
+; as another request, so it sends *EOF while the line is still being stored.
+disk_crlf:
+        lda #$0d
+        jmp disk_putc
+
+; Read one host line into BUF. A leading LF is dropped. A = status.
+disk_read:
+        jsr disk_getc
+        bcs @to
+        cmp #$03
+        beq @brk
+        cmp #$0a
+        bne @got
+        jsr disk_getc
+        bcs @to
+        cmp #$03
+        beq @brk
+@got:   ldy #0
+        cmp #$0d
+        beq @nul
+@st:    cpy #120
+        bcs @drain
+        sta BUF,y
+        iny
+        jsr disk_getc
+        bcs @to
+        cmp #$03
+        beq @brk
+        cmp #$0d
+        beq @nul
+        cmp #$0a
+        bne @st
+@nul:   lda #0
+        sta BUF,y
+        jmp classify
+@drain: jsr disk_getc
+        bcs @to
+        cmp #$03
+        beq @brk
+        cmp #$0d
+        beq @long
+        cmp #$0a
+        bne @drain
+@long:  lda #0
+        sta BUF
+        lda #DISK_LONG
+        rts
+@brk:   lda #DISK_BRK
+        rts
+@to:    lda #DISK_TO
+        rts
+
+; One byte from the host. The short disk_getc timeout is retried so a
+; person can answer DELETE. A is the byte.
+disk_key:
+@w:     jsr disk_getc
+        bcs @w
+        rts
+
+; C=1 if Ctrl-C is waiting. Any other latched byte stays for disk_getc.
+disk_hit_brk:
+        lda disk_prx
+        beq @poll
+        lda disk_prv
+        cmp #$03
+        bne @no
+        lda #0
+        sta disk_prx
+        sec
+        rts
+@poll:  lda ACIA_STAT
+        and #ACIA_RX
+        beq @no
+        lda ACIA_DATA
+        cmp #$03
+        beq @yes
+        sta disk_prv
+        lda #1
+        sta disk_prx
+@no:    clc
+        rts
+@yes:   sec
+        rts
+
+classify:
+        lda BUF
+        cmp #'*'
+        beq @star
+        cmp #'!'
+        beq @bang
+@line:  lda #DISK_LINE
+        rts
+@star:  jsr eq_eject
+        bne @fnd
+        lda #DISK_EJ
+        rts
+@fnd:   jsr eq_found
+        bne @eof
+        lda #DISK_FOUND
+        rts
+@eof:   jsr eq_eof
+        bne @sz
+        lda #DISK_EOF
+        rts
+@sz:    jsr eq_size
+        bne @line
+        lda #DISK_SIZE
+        rts
+@bang:  jsr eq_nf
+        bne @line
+        lda #DISK_NF
+        rts
+
+eq_eof:
+        lda BUF+1
+        cmp #'E'
+        bne @no
+        lda BUF+2
+        cmp #'O'
+        bne @no
+        lda BUF+3
+        cmp #'F'
+        bne @no
+        lda BUF+4
+@no:    rts
+
+eq_size:
+        ldx #4
+@c:     lda BUF,x
+        cmp size_txt,x
+        bne @out
+        dex
+        bpl @c
+        lda BUF+5
+        cmp #' '
+@out:   rts
+
+eq_nf:
+        ldx #7
+@c:     lda BUF+1,x
+        cmp nf_txt,x
+        bne @out
+        dex
+        bpl @c
+        lda BUF+9
+@out:   rts
+
+eq_found:
+        ldx #5
+@c:     lda BUF,x
+        cmp found_txt,x
+        bne @out
+        dex
+        bpl @c
+        lda BUF+6
+@out:   rts
+
+eq_eject:
+        ldx #5
+@c:     lda BUF,x
+        cmp eject_txt,x
+        bne @out
+        dex
+        bpl @c
+        lda BUF+6
+@out:   rts
+
+; C=1 on timeout (~2 s). Byte in A, C=0 otherwise.
+disk_getc:
+        lda disk_prx
+        beq @poll
+        lda #0
+        sta disk_prx
+        lda disk_prv
+        clc
+        rts
+@poll:  lda #0
+        sta mon_cnt
+        sta mon_nib
+        lda #8
+        sta mon_idx
+@w:     lda ACIA_STAT
+        and #ACIA_RX
+        bne @got
+        inc mon_cnt
+        bne @w
+        inc mon_nib
+        bne @w
+        dec mon_idx
+        bne @w
+        sec
+        rts
+@got:   lda ACIA_DATA
+        clc
+        rts
+
+send_ok:
+        ldx #0
+@p:     lda ok_txt,x
+        beq @d
+        jsr disk_putc
+        inx
+        bne @p
+@d:             rts
+
+; Scratch in the monitor line buffer. Idle RX does not run while disk_busy.
+pct_a = mon_buf
+pct_b = mon_buf+3
+rem   = mon_buf+6
+pct_n = mon_buf+9
+pct_f = mon_buf+10
+
+; Draw [bar] nnn% on disk_row. disk_pos/disk_all are the 16-bit fraction.
+; On the serial console the same ACIA carries the file, so the bar is not
+; drawn here. The host gets one "*PCT n" line and draws it.
+disk_show:
+        lda mon_basic
+        beq @lcd
+        jmp disk_send_pct
+@lcd:   jsr disk_pct
+        sta pct_n
+        lda disk_row
+        ldx #0
+        jsr lcd_locate
+        lda #'['
+        jsr HCOUTCH
+        lda pct_n
+        ldy #0
+@fif:   cmp #5
+        bcc @fil
+        sbc #5
+        iny
+        cpy #20
+        bcc @fif
+@fil:   sty pct_f
+        ldx #0
+@bar:   lda #' '
+        cpx pct_f
+        bcs @ch
+        lda #$ff
+@ch:    jsr HCOUTCH
+        inx
+        cpx #20
+        bne @bar
+        lda #']'
+        jsr HCOUTCH
+        lda #' '
+        jsr HCOUTCH
+        lda pct_n
+        jsr disk_dec
+        lda #'%'
+        jmp HCOUTCH
+
+disk_dec:
+        ldx #' '
+        cmp #100
+        bcc @ten
+        ldx #'1'
+        sbc #100
+@ten:   ldy #0
+@t:     cmp #10
+        bcc @td
+        sbc #10
+        iny
+        bne @t
+@td:    pha
+        txa
+        cmp #'1'
+        beq @h
+        cpy #0
+        bne @h
+        lda #' '
+@h:     jsr HCOUTCH
+        cpy #0
+        bne @dg
+        cpx #'1'
+        beq @dg
+        lda #' '
+        bne @to
+@dg:    tya
+        clc
+        adc #'0'
+@to:    jsr HCOUTCH
+        pla
+        clc
+        adc #'0'
+        jmp HCOUTCH
+
+disk_nl:
+        lda #$0d
+        jsr HCOUTCH
+        lda #$0a
+        jmp HCOUTCH
+
+; "*PCT n" and CR. n is disk_pos/disk_all, 0..100. Serial console only.
+disk_send_pct:
+        jsr disk_pct
+        pha
+        ldx #0
+@m:     lda pct_msg,x
+        beq @n
+        jsr disk_putc
+        inx
+        bne @m
+@n:     pla
+        jsr put_pct
+        jmp disk_crlf
+
+put_pct:
+        cmp #100
+        bcc @lt
+        lda #'1'
+        jsr disk_putc
+        lda #'0'
+        jsr disk_putc
+        lda #'0'
+        jmp disk_putc
+@lt:    ldx #0
+@d:     cmp #10
+        bcc @o
+        sbc #10
+        inx
+        bcs @d
+@o:     pha
+        cpx #0
+        beq @u
+        txa
+        clc
+        adc #'0'
+        jsr disk_putc
+@u:     pla
+        clc
+        adc #'0'
+        jmp disk_putc
+
+pct_msg:
+        .byte "*PCT ",0
+
+; BUF holds "*SIZE n". Z=1 if the number is 0. disk_pos starts at 0.
+disk_take_size:
+        lda #0
+        sta disk_all
+        sta disk_all+1
+        sta disk_pos
+        sta disk_pos+1
+        ldy #6
+@d:     lda BUF,y
+        cmp #'0'
+        bcc @z
+        cmp #'9'+1
+        bcs @z
+        jsr all_mul10
+        lda BUF,y
+        and #$0f
+        clc
+        adc disk_all
+        sta disk_all
+        bcc @n
+        inc disk_all+1
+@n:     iny
+        bne @d
+@z:     lda disk_all
+        ora disk_all+1
+        rts
+
+all_mul10:
+        asl disk_all
+        rol disk_all+1
+        lda disk_all
+        sta pct_b
+        lda disk_all+1
+        sta pct_b+1
+        asl disk_all
+        rol disk_all+1
+        asl disk_all
+        rol disk_all+1
+        clc
+        lda disk_all
+        adc pct_b
+        sta disk_all
+        lda disk_all+1
+        adc pct_b+1
+        sta disk_all+1
+        rts
+
+disk_pct:
+        lda disk_all
+        ora disk_all+1
+        beq @full
+        lda disk_pos+1
+        cmp disk_all+1
+        bcc @mul
+        bne @full
+        lda disk_pos
+        cmp disk_all
+        bcs @full
+@mul:   lda #0
+        sta pct_a
+        sta pct_a+1
+        sta pct_a+2
+        ldx #2
+        jsr add_shl
+        ldx #5
+        jsr add_shl
+        ldx #6
+        jsr add_shl
+        lda #0
+        sta pct_b
+        sta pct_b+1
+        sta pct_b+2
+        ldy #24
+@bit:   asl pct_a
+        rol pct_a+1
+        rol pct_a+2
+        rol pct_b
+        rol pct_b+1
+        rol pct_b+2
+        sec
+        lda pct_b
+        sbc disk_all
+        sta rem
+        lda pct_b+1
+        sbc disk_all+1
+        sta rem+1
+        lda pct_b+2
+        sbc #0
+        bcc @no
+        sta pct_b+2
+        lda rem
+        sta pct_b
+        lda rem+1
+        sta pct_b+1
+        inc pct_a
+@no:    dey
+        bne @bit
+        lda pct_a
+        cmp #101
+        bcc @out
+@full:  lda #100
+@out:   rts
+
+add_shl:
+        lda disk_pos
+        sta rem
+        lda disk_pos+1
+        sta rem+1
+        lda #0
+        sta rem+2
+@s:     asl rem
+        rol rem+1
+        rol rem+2
+        dex
+        bne @s
+        clc
+        lda pct_a
+        adc rem
+        sta pct_a
+        lda pct_a+1
+        adc rem+1
+        sta pct_a+1
+        lda pct_a+2
+        adc rem+2
+        sta pct_a+2
+        rts
+
+mount_txt:
+        .byte "*DISK"
+eject_txt:
+        .byte "*EJECT"
+found_txt:
+        .byte "*FOUND"
+size_txt:
+        .byte "*SIZE"
+nf_txt:
+        .byte "NOTFOUND"
+ok_txt:
+        .byte "*OK",$0d,$0a,0
+banner:
+        .byte $0d,$0a,"MON 6502",$0d,$0a,"*",0

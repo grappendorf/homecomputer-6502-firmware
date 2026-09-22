@@ -1,0 +1,684 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; Tiny Wozmon-style hex monitor on the ACIA. Runs in the IRQ (RX/TX) so
+; Microsoft BASIC on the LCD/keyboard never sees it. AG is a JSR, so it
+; runs between BASIC statements (HCISCNTC / HCINCH), not inside the IRQ.
+;
+;   A          dump 16 bytes at A
+;   A.B        dump A..B inclusive
+;   A: hh hh   deposit
+;   AG         JSR A (must RTS)
+;   CR         next 16 bytes
+;   ?          this list
+;   Ctrl-C     abort dump / line
+
+.include "io.inc65"
+.include "zp.inc65"
+
+ST_IDLE = 0
+ST_DUMP = 1
+ST_HELP = 2
+ST_STAR = 3
+ST_ERR  = 4
+
+.segment "CODE"
+
+.import disk_init
+.import disk_try_mount
+.import disk_rx
+.import serio_init
+.import serio_try_mount
+.import serio_irq_rx
+.import mon_basic
+
+.export mon_init
+.export mon_irq
+.export mon_run_go
+
+mon_init:
+        sta ACIA_STAT
+        lda #$1f          ;19200 8N1, internal baud generator
+        sta ACIA_CTRL
+        lda #ACIA_CMD_ON
+        sta ACIA_CMD
+        jsr disk_init
+        jsr serio_init
+        lda #0
+        sta mon_len
+        sta mon_st
+        sta mon_go
+        sta mon_eol
+        sta mon_a
+        sta mon_a+1
+        ldx #0
+@b:     lda banner,x
+        beq @star
+        jsr putc_w
+        inx
+        bne @b
+@star:  lda #'*'
+        jmp putc_w
+
+mon_irq:
+        lda mon_disk
+        bne @disk
+        lda mon_basic
+        bne @basic
+        ldx #16
+@rx:    lda ACIA_STAT
+        and #ACIA_RX
+        beq @tx
+        lda ACIA_DATA
+        jsr mon_in
+        dex
+        bne @rx
+@tx:    lda #8
+        sta mon_burst
+@burst: jsr mon_out1
+        bcc @done
+        dec mon_burst
+        bne @burst
+@done:  rts
+
+@disk:  lda disk_busy
+        bne @done
+        ldx #16
+@drx:   lda ACIA_STAT
+        and #ACIA_RX
+        beq @done
+        lda ACIA_DATA
+        jsr disk_rx
+        dex
+        bne @drx
+        rts
+
+; Timer IRQ still runs while RX IRQ is off. Do not pull ACIA bytes into
+; the keyboard ring during a transfer or DIR/LOAD lose characters.
+@basic: lda disk_busy
+        bne @done
+        jmp serio_irq_rx
+
+mon_run_go:
+        lda mon_go
+        beq @rts
+        lda #0
+        sta mon_go
+        jsr go_jmp
+        lda #ST_STAR
+        sta mon_st
+        lda #0
+        sta mon_sub
+@rts:   rts
+
+go_jmp:
+        lda mon_goad
+        ora mon_goad+1
+        beq @rts
+        jmp (mon_goad)
+@rts:   rts
+
+; A = received byte. PTY/picocom often sends LF, or CR+LF. Either ends a
+; line. mon_eol holds the last EOL byte (0 = none). Only the other EOL byte
+; right after it is swallowed (LF after CR, CR after LF), so CR,CR or
+; CRLF,CRLF still give two line ends. Output states (dump,
+; help, *) used to drop all keys except Ctrl-C, which looks like "Return
+; does nothing". Any real key cancels output first.
+mon_in:
+        cmp #$03
+        beq abort
+        cmp #$0d
+        beq is_eol
+        cmp #$0a
+        beq is_eol
+        ldx #0
+        stx mon_eol
+        ldx mon_st
+        beq @idle
+        ldx #0
+        stx mon_st
+@idle:  cmp #$08
+        beq do_bs
+        cmp #$7f
+        beq do_bs
+        cmp #' '
+        bcc @rts
+        ldx mon_len
+        cpx #31
+        bcs @rts
+        sta mon_buf,x
+        inx
+        stx mon_len
+        jmp putc_try
+@rts:   rts
+
+is_eol:
+        ldx mon_eol
+        beq @line
+        cmp mon_eol
+        beq @line
+        ldx #0
+        stx mon_eol
+        rts
+@line:  sta mon_eol
+        lda #0
+        sta mon_st
+        jmp do_cr
+
+abort:
+        lda #0
+        sta mon_len
+        lda #ST_STAR
+        sta mon_st
+        lda #0
+        sta mon_sub
+        rts
+
+do_bs:
+        ldx mon_len
+        beq @rts
+        dex
+        stx mon_len
+        lda #$08
+        jsr putc_try
+        lda #' '
+        jsr putc_try
+        lda #$08
+        jmp putc_try
+@rts:   rts
+
+do_cr:
+        lda #$0d
+        jsr putc_try
+        lda #$0a
+        jsr putc_try
+        jsr parse
+        lda #0
+        sta mon_len
+        rts
+
+; ---- parser ----
+
+parse:
+        jsr disk_try_mount
+        bcs @mnt
+        jsr serio_try_mount
+        bcc @body
+@mnt:   rts
+@body:  ldy #0
+        jsr skip_sp
+        cpy mon_len
+        beq next16
+        lda mon_buf,y
+        cmp #'?'
+        bne @num
+        lda #ST_HELP
+        sta mon_st
+        lda #0
+        sta mon_hlp
+        sta mon_sub
+        rts
+@num:   jsr read_hex
+        bcs :+
+        jmp bad
+:
+        lda mon_t
+        sta mon_a
+        lda mon_idx
+        sta mon_a+1
+        jsr skip_sp
+        cpy mon_len
+        beq dump16
+        lda mon_buf,y
+        cmp #'.'
+        beq @range
+        cmp #':'
+        beq @dep
+        and #$df
+        cmp #'G'
+        beq @go
+        jmp bad
+@range: iny
+        jsr skip_sp
+        jsr read_hex
+        bcs :+
+        jmp bad
+:
+        lda mon_t
+        sta mon_b
+        lda mon_idx
+        sta mon_b+1
+        jmp dump_go
+@dep:   iny
+        jmp deposit
+@go:    lda mon_a
+        sta mon_goad
+        lda mon_a+1
+        sta mon_goad+1
+        lda #1
+        sta mon_go
+        lda #ST_STAR
+        sta mon_st
+        lda #0
+        sta mon_sub
+        rts
+
+next16:
+dump16:
+        clc
+        lda mon_a
+        adc #15
+        sta mon_b
+        lda mon_a+1
+        adc #0
+        sta mon_b+1
+dump_go:
+        lda mon_b+1
+        cmp mon_a+1
+        bcs :+
+        jmp bad
+:
+        bne @ok
+        lda mon_b
+        cmp mon_a
+        bcs :+
+        jmp bad
+:
+@ok:    lda #ST_DUMP
+        sta mon_st
+        lda #0
+        sta mon_sub
+        sta mon_n
+        sta mon_nib
+        rts
+
+bad:
+        lda #ST_ERR
+        sta mon_st
+        lda #0
+        sta mon_sub
+        rts
+
+deposit:
+        jsr skip_sp
+        cpy mon_len
+        beq @done
+        jsr one_digit
+        bcs :+
+        jmp bad
+:
+        sta mon_t
+        jsr one_digit
+        bcc @wr
+        asl mon_t
+        asl mon_t
+        asl mon_t
+        asl mon_t
+        ora mon_t
+        sta mon_t
+@wr:    lda mon_t
+        ldx #0
+        sta (mon_a,x)
+        inc mon_a
+        bne deposit
+        inc mon_a+1
+        jmp deposit
+@done:  lda #ST_STAR
+        sta mon_st
+        lda #0
+        sta mon_sub
+        rts
+
+skip_sp:
+@l:     cpy mon_len
+        bcs @out
+        lda mon_buf,y
+        cmp #' '
+        bne @out
+        iny
+        bne @l
+@out:   rts
+
+; Hex from mon_buf,y. C=1 ok. Result lo=mon_t hi=mon_idx. Y advanced.
+read_hex:
+        lda #0
+        sta mon_t
+        sta mon_idx
+        sty mon_n
+        jsr one_digit
+        bcc @fail
+@acc:   ldx #4
+@sh:    asl mon_t
+        rol mon_idx
+        dex
+        bne @sh
+        ora mon_t
+        sta mon_t
+        jsr one_digit
+        bcs @acc
+        sec
+        rts
+@fail:  ldy mon_n
+        clc
+        rts
+
+; C=1, A=nibble 0-15, Y advanced.
+one_digit:
+        cpy mon_len
+        bcs @no
+        lda mon_buf,y
+        jsr hexval
+        bcc @no
+        iny
+        sec
+        rts
+@no:    clc
+        rts
+
+hexval:
+        cmp #'0'
+        bcc @no
+        cmp #'9'+1
+        bcc @dec
+        and #$df
+        cmp #'A'
+        bcc @no
+        cmp #'G'
+        bcs @no
+        sec
+        sbc #'A'-10
+        sec
+        rts
+@dec:   sec
+        sbc #'0'
+        sec
+        rts
+@no:    clc
+        rts
+
+; ---- output state machine, C=1 if a char was sent ----
+
+mon_out1:
+        lda mon_st
+        cmp #ST_DUMP
+        beq out_dump
+        cmp #ST_HELP
+        beq out_help
+        cmp #ST_STAR
+        beq out_star
+        cmp #ST_ERR
+        beq out_err
+        clc
+        rts
+
+out_star:
+        ldx mon_sub
+        lda startxt,x
+        jsr putc_try
+        bcc @rts
+        inc mon_sub
+        lda mon_sub
+        cmp #3
+        bcc @sec
+        lda #ST_IDLE
+        sta mon_st
+@sec:   sec
+@rts:   rts
+
+out_err:
+        ldx mon_sub
+        lda errtxt,x
+        jsr putc_try
+        bcc @rts
+        inc mon_sub
+        lda mon_sub
+        cmp #4
+        bcc @sec
+        lda #ST_IDLE
+        sta mon_st
+@sec:   sec
+@rts:   rts
+
+out_help:
+        ldx mon_hlp
+        lda helptxt,x
+        bne @ch
+        lda #ST_STAR
+        sta mon_st
+        lda #0
+        sta mon_sub
+        clc
+        rts
+@ch:    jsr putc_try
+        bcc @rts
+        inc mon_hlp
+        sec
+@rts:   rts
+
+out_dump:
+        lda mon_sub
+        beq @cr
+        cmp #1
+        beq @lf
+        cmp #2
+        beq @ah
+        cmp #3
+        beq @al
+        cmp #4
+        beq @sp1
+        cmp #5
+        beq @hex
+        cmp #6
+        beq @sp2
+        cmp #7
+        beq @asc
+        jmp dump_next
+@cr:    lda #$0d
+        jsr putc_try
+        bcc @rts
+        inc mon_sub
+        sec
+        rts
+@lf:    lda #$0a
+        jsr putc_try
+        bcc @rts
+        jsr dump_prep
+        inc mon_sub
+        sec
+        rts
+@ah:    lda mon_a+1
+        jmp dump_hexb
+@al:    lda mon_a
+        jmp dump_hexb
+@sp1:   lda #' '
+        jsr putc_try
+        bcc @rts
+        lda #0
+        sta mon_n
+        sta mon_nib
+        inc mon_sub
+        sec
+        rts
+@hex:   jmp dump_hexs
+@sp2:   lda #' '
+        jsr putc_try
+        bcc @rts
+        lda #0
+        sta mon_n
+        inc mon_sub
+        sec
+        rts
+@asc:   jmp dump_asc
+@rts:   rts
+
+dump_prep:
+        lda mon_b
+        sec
+        sbc mon_a
+        sta mon_cnt
+        lda mon_b+1
+        sbc mon_a+1
+        bne @sixteen
+        inc mon_cnt
+        beq @sixteen
+        lda mon_cnt
+        cmp #17
+        bcc @ok
+@sixteen:
+        lda #16
+        sta mon_cnt
+@ok:    rts
+
+dump_hexb:
+        sta mon_idx
+        lda mon_nib
+        bne @lo
+        lda mon_idx
+        lsr
+        lsr
+        lsr
+        lsr
+        jsr nibble
+        jsr putc_try
+        bcc @rts
+        inc mon_nib
+        sec
+        rts
+@lo:    lda mon_idx
+        jsr nibble
+        jsr putc_try
+        bcc @rts
+        lda #0
+        sta mon_nib
+        inc mon_sub
+        sec
+@rts:   rts
+
+dump_hexs:
+        lda mon_nib
+        beq @hi
+        cmp #1
+        beq @lo
+        lda #' '
+        jsr putc_try
+        bcc @rts
+        lda #0
+        sta mon_nib
+        inc mon_n
+        lda mon_n
+        cmp mon_cnt
+        bcc @sec
+        inc mon_sub
+@sec:   sec
+        rts
+@hi:    ldy mon_n
+        lda (mon_a),y
+        lsr
+        lsr
+        lsr
+        lsr
+        jsr nibble
+        jsr putc_try
+        bcc @rts
+        inc mon_nib
+        sec
+        rts
+@lo:    ldy mon_n
+        lda (mon_a),y
+        jsr nibble
+        jsr putc_try
+        bcc @rts
+        inc mon_nib
+        sec
+@rts:   rts
+
+dump_asc:
+        ldy mon_n
+        lda (mon_a),y
+        cmp #' '
+        bcc @dot
+        cmp #127
+        bcs @dot
+        jmp @put
+@dot:   lda #'.'
+@put:   jsr putc_try
+        bcc @rts
+        inc mon_n
+        lda mon_n
+        cmp mon_cnt
+        bcc @sec
+        inc mon_sub
+@sec:   sec
+@rts:   rts
+
+dump_next:
+        clc
+        lda mon_a
+        adc mon_cnt
+        sta mon_t
+        lda mon_a+1
+        adc #0
+        bcs @fin
+        sta mon_a+1
+        lda mon_t
+        sta mon_a
+        lda mon_b+1
+        cmp mon_a+1
+        bcc @fin
+        bne @more
+        lda mon_b
+        cmp mon_a
+        bcc @fin
+@more:  lda #0
+        sta mon_sub
+        sta mon_n
+        sta mon_nib
+        sec
+        rts
+@fin:   lda #ST_STAR
+        sta mon_st
+        lda #0
+        sta mon_sub
+        sec
+        rts
+
+nibble:
+        and #$0f
+        cmp #10
+        bcc @d
+        adc #'A'-11
+        rts
+@d:     adc #'0'
+        rts
+
+putc_try:
+        pha
+        lda ACIA_STAT
+        and #ACIA_TX
+        beq @full
+        pla
+        sta ACIA_DATA
+        sec
+        rts
+@full:  pla
+        clc
+        rts
+
+putc_w:
+        pha
+@w:     lda ACIA_STAT
+        and #ACIA_TX
+        beq @w
+        pla
+        sta ACIA_DATA
+        rts
+
+banner:
+        .byte $0d,$0a,"MON 6502",$0d,$0a,0
+helptxt:
+        .byte "A[.B] dump  A:hh poke  AG jsr",$0d,$0a,0
+errtxt:
+        .byte "?",$0d,$0a,"*"
+startxt:
+        .byte $0d,$0a,"*"

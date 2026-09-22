@@ -1,0 +1,464 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; 14x8 matrix, active-low rows, columns on VIA2 port A (internal pull-ups).
+; Scancodes match docs/keyboard-matrix.md. One key at a time. A held key
+; repeats: 400 ms after the first character, then every 50 ms.
+; Enter is CR. Backspace is $08. Break and Ctrl+C are $03.
+; Caps Lock is a plain momentary key on this keyboard. The firmware latches
+; it: each press toggles MOD_CAPS in kb_mod. Shift inverts the case while it is on.
+; Arrows, Pos1, Ende, Entf and Einfg return the ED_* codes in io.inc65.
+
+.include "io.inc65"
+.include "zp.inc65"
+
+.import delay_ms
+.import mon_run_go
+.import mon_basic
+.import serio_resolve_dev
+.import serio_inch
+.import serio_cntc
+
+.segment "CODE"
+
+.export kb_init
+.export HCINCH
+.export HCISCNTC
+.export kb_poll
+
+kb_init:
+        lda #0
+        sta VIA2_DDRA
+        lda #$ff
+        sta VIA2_DDRB
+        sta VIA2_ORB
+        lda VIA1_DDRB
+        ora #$3f
+        sta VIA1_DDRB
+        lda VIA1_ORB
+        ora #$3f
+        sta VIA1_ORB
+        lda #$ff
+        sta kb_last
+        lda #MOD_CAPSKEY        ;Caps off. A key held through reset is no press.
+        sta kb_mod
+        rts
+
+; Called between BASIC statements. Z=1 and C=1 means Ctrl+C / Break,
+; which falls into the STOP statement. X and Y are preserved.
+HCISCNTC:
+        txa
+        pha
+        tya
+        pha
+        lda mon_basic
+        bne @nogo
+        jsr mon_run_go
+@nogo:  jsr serio_resolve_dev
+        cmp #2
+        beq @serc
+        jsr kb_scan
+        cmp #KEY_BREAK
+        beq @break
+        cmp #KEY_C
+        bne @no
+        lda kb_mod
+        and #MOD_CTRL
+        beq @no
+@break: pla
+        tay
+        pla
+        tax
+        lda #$03
+        cmp #$03
+        rts
+@no:    pla
+        tay
+        pla
+        tax
+        lda #$01
+        rts
+@serc:  jsr serio_cntc
+        bne @no
+        jmp @break
+
+; Blocking read. A = ASCII, or it keeps waiting. X and Y are preserved.
+; If serial BASIC is mounted while this call is still waiting on the
+; keyboard, A = 0 and the caller should look again. The line editor
+; then prints the serial banner without a keystroke.
+HCINCH:
+        txa
+        pha
+        tya
+        pha
+        jsr serio_resolve_dev
+        cmp #2
+        beq @was_ser
+        lda #0
+        pha
+        jmp @wait
+@was_ser:
+        lda #1
+        pha
+@wait:  lda mon_basic
+        bne @nogo
+        jsr mon_run_go
+@nogo:  jsr serio_resolve_dev
+        cmp #2
+        beq @ser
+        jsr kb_scan
+        cmp #$ff
+        bne @down
+        sta kb_last
+        lda #0
+        sta kb_rept
+        beq @wait
+@down:  cmp kb_last
+        bne @new
+        lda kb_rept
+        bne @rate
+        lda #16                 ;16 * 25 ms = 400 ms before the first repeat
+        bne @arm
+@rate:  lda #2                  ;2 * 25 ms = 50 ms between repeats
+@arm:   sta kb_tmp
+@gap:   lda #25
+        jsr delay_ms
+        jsr kb_scan
+        cmp #$ff
+        bne @held
+        sta kb_last
+        lda #0
+        sta kb_rept
+        beq @wait
+@held:  cmp kb_last
+        bne @new
+        dec kb_tmp
+        bne @gap
+        lda #1
+        sta kb_rept
+        lda kb_last
+        jmp @emit
+@new:   ldx #0
+        stx kb_rept
+        sta kb_tmp
+        lda #5
+        jsr delay_ms
+        jsr kb_scan
+        cmp kb_tmp
+        bne @wait
+        sta kb_last
+@emit:  jsr kb_ascii
+        beq @letgo
+        sta kb_tmp
+        pla
+        pla
+        tay
+        pla
+        tax
+        lda kb_tmp
+        rts
+@letgo: jsr kb_scan
+        cmp #$ff
+        bne @letgo
+        sta kb_last
+        jmp @wait
+@ser:   pla
+        bne @serb
+        pla
+        tay
+        pla
+        tax
+        lda #0
+        rts
+@serb:  jsr serio_inch
+        sta kb_tmp
+        pla
+        tay
+        pla
+        tax
+        lda kb_tmp
+        rts
+
+; One scan, no wait. A = ASCII of the held key, or 0. X and Y survive.
+kb_poll:
+        txa
+        pha
+        tya
+        pha
+        jsr kb_scan
+        cmp #$ff
+        beq @no
+        jsr kb_ascii
+        jmp @out
+@no:    lda #0
+@out:   sta kb_tmp
+        pla
+        tay
+        pla
+        tax
+        lda kb_tmp
+        rts
+
+; A = scancode or $FF. kb_mod is updated. MOD_CAPS and MOD_CAPSKEY are
+; kept from the last scan: they are the Caps latch, not the key. Clobbers X, Y.
+kb_scan:
+        lda kb_mod
+        and #MOD_CAPS|MOD_CAPSKEY
+        sta kb_mod
+        lda #$ff
+        sta kb_code
+        ldx #0
+@row:   jsr read_row
+        cpx #6
+        bne @ck8
+        tay
+        and #$10
+        beq @no_gr
+        lda kb_mod
+        ora #MOD_ALTGR
+        sta kb_mod
+@no_gr: tya
+        and #$20
+        beq @m6
+        lda kb_mod
+        ora #MOD_ALT
+        sta kb_mod
+@m6:    tya
+        and #%11001111
+        jmp @use
+@ck8:   cpx #8
+        bne @ck11
+        tay
+        jsr caps_edge
+        tya
+        and #$7f
+        jmp @use
+@ck11:  cpx #11
+        bne @ck13
+        tay
+        and #%11000000
+        beq @m11
+        lda kb_mod
+        ora #MOD_SHIFT
+        sta kb_mod
+@m11:   tya
+        and #%00111111
+        jmp @use
+@ck13:  cpx #13
+        bne @use
+        tay
+        and #%01000100
+        beq @m13
+        lda kb_mod
+        ora #MOD_CTRL
+        sta kb_mod
+@m13:   tya
+        and #%10111011
+@use:   beq @next
+        ldy kb_code
+        cpy #$ff
+        bne @next
+        jsr to_scan
+        sta kb_code
+@next:  inx
+        cpx #14
+        bne @row
+        lda kb_code
+        rts
+
+; A = row 8, X = 8. MOD_CAPSKEY follows the Caps key, and its press edge
+; toggles MOD_CAPS. A change must still be there 5 ms later, so a bouncing
+; contact counts once. Holding it does nothing more. Preserves X and Y.
+caps_edge:
+        eor kb_mod
+        and #MOD_CAPSKEY        ;Caps is column 7, the same bit
+        beq @out
+        txa
+        pha
+        tya
+        pha
+        lda #5
+        jsr delay_ms
+        ldx #8
+        jsr read_row
+        eor kb_mod
+        and #MOD_CAPSKEY
+        beq @keep               ;bounced back
+        lda kb_mod
+        eor #MOD_CAPSKEY
+        sta kb_mod
+        bpl @keep               ;released
+        eor #MOD_CAPS
+        sta kb_mod
+@keep:  pla
+        tay
+        pla
+        tax
+@out:   rts
+
+; A = pressed-bit mask, X = row. Returns scancode. Preserves X.
+; Scratch is kb_cols. kb_tmp is HCINCH's debounce sample and must stay.
+to_scan:
+        ldy #0
+@bit:   lsr
+        bcs @col
+        iny
+        cpy #8
+        bne @bit
+        lda #$ff
+        rts
+@col:   txa
+        asl
+        asl
+        asl
+        sta kb_cols
+        tya
+        clc
+        adc kb_cols
+        rts
+
+; X = row 0..13. Returns pressed columns in A (bit set = pressed). Preserves X.
+read_row:
+        txa
+        pha
+        cpx #8
+        bcs @high
+        lda #$3f
+        sta VIA1_ORB
+        lda row_bit,x
+        eor #$ff
+        sta VIA2_ORB
+        jmp @sample
+@high:  lda #$ff
+        sta VIA2_ORB
+        txa
+        sec
+        sbc #8
+        tay
+        lda row_bit,y
+        eor #$ff
+        and #$3f
+        sta VIA1_ORB
+@sample:
+        nop
+        nop
+        nop
+        nop
+        lda VIA2_IRA
+        eor #$ff
+        sta kb_cols
+        lda #$ff
+        sta VIA2_ORB
+        lda #$3f
+        sta VIA1_ORB
+        pla
+        tax
+        lda kb_cols
+        rts
+
+; A = scancode. Returns ASCII in A (0 = no character). Clobbers X, Y.
+kb_ascii:
+        tax
+        lda kb_mod
+        and #MOD_ALTGR
+        beq @nogr
+        lda ascii_altgr,x
+        beq @nogr
+        jmp @ctrl
+@nogr:  lda kb_mod
+        and #MOD_SHIFT
+        beq @lower
+        lda ascii_upper,x
+        jmp @caps
+@lower: lda ascii_lower,x
+@caps:  beq @out
+        pha
+        lda kb_mod
+        and #MOD_CAPS
+        beq @nocaps
+        pla
+        cmp #'A'
+        bcc @ctrl
+        cmp #'Z'+1
+        bcc @flip
+        cmp #'a'
+        bcc @ctrl
+        cmp #'z'+1
+        bcs @ctrl
+@flip:  eor #$20
+        jmp @ctrl
+@nocaps:
+        pla
+@ctrl:  beq @out
+        pha
+        lda kb_mod
+        and #MOD_CTRL
+        beq @plain
+        pla
+        cmp #'A'
+        bcc @out
+        cmp #'Z'+1
+        bcc @mask
+        cmp #'a'
+        bcc @out
+        cmp #'z'+1
+        bcs @out
+@mask:  and #$1f
+        rts
+@plain: pla
+@out:   rts
+
+row_bit:
+        .byte $01, $02, $04, $08, $10, $20, $40, $80
+
+; AltGr layer. 0 = this key has none. Same index as ascii_lower.
+ascii_altgr:
+        .byte 0, 0, 0, '@', 0, 0, 0, 0
+        .byte LCD_SUP3, 0, 0, LCD_EURO, 0, 0, 0, 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte '{', 0, 0, 0, 0, 0, LCD_MU, 0
+        .byte '[', 0, 0, 0, 0, 0, 0, LCD_TILDE
+        .byte '}', 0, LCD_BS, 0, 0, 0, 0, 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte 0, 0, 0, 0, 0, '|', 0, 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte 0, LCD_SUP2, 0, ']', 0, 0, 0, 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+
+; 112 scancodes, column 0..7 within each row. See docs/keyboard-matrix.md.
+; Enter ($4E) is CR. Backspace ($4F) is $08. Break ($3E) is Ctrl+C.
+ascii_lower:
+        .byte '1', 'a', '^', 'q', 0, $1b, 'y', 0
+        .byte '3', 'd', 0, 'e', 0, 0, 'c', 0
+        .byte '4', 'f', '5', 'r', 'b', 'g', 'v', 't'
+        .byte '7', 'j', '6', 'u', 'n', 'h', 'm', 'z'
+        .byte '8', 'k', LCD_ACUTE, 'i', 0, 0, ',', '+'
+        .byte '0', $ef, $e2, 'p', '-', $e1, '#', $f5
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte ED_END, 0, ED_HOME, 0, ED_LEFT, ED_UP, $03, 0
+        .byte 0, 's', ED_INS, 'w', ED_RIGHT, '<', 'x', 0
+        .byte 0, 0, 0, 0, ' ', 0, $0d, $08
+        .byte 0, 'l', 0, 'o', 0, 0, '.', 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte 0, '2', ED_DEL, '9', ED_DOWN, 0, 0, 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+
+ascii_upper:
+        .byte '!', 'A', LCD_DEG, 'Q', 0, $1b, 'Y', 0
+        .byte $f2, 'D', 0, 'E', 0, 0, 'C', 0
+        .byte '$', 'F', '%', 'R', 'B', 'G', 'V', 'T'
+        .byte '/', 'J', '&', 'U', 'N', 'H', 'M', 'Z'
+        .byte '(', 'K', $60, 'I', 0, 0, ';', '*'
+        .byte '=', $ef, '?', 'P', '_', $e1, $27, $f5
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte ED_END, 0, ED_HOME, 0, ED_LEFT, ED_UP, $03, 0
+        .byte 0, 'S', ED_INS, 'W', ED_RIGHT, '>', 'X', 0
+        .byte 0, 0, 0, 0, ' ', 0, $0d, $08
+        .byte 0, 'L', 0, 'O', 0, 0, ':', 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0
+        .byte 0, $22, ED_DEL, ')', ED_DOWN, 0, 0, 0
+        .byte 0, 0, 0, 0, 0, 0, 0, 0

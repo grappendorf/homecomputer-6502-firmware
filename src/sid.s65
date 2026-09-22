@@ -1,0 +1,956 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; SID 8580 at $7F60, clock 1 MHz. Registers are write-only, so every change
+; goes through the shadow copies below. Frequency register = Hz * 16.777216.
+; Filter cutoff is linear, 30 Hz at register 0 and 12000 Hz at register 2047,
+; which matches an 8580 with the 22 nF capacitors on this board.
+
+.include "io.inc65"
+.include "zp.inc65"
+
+SID     = $7F60
+
+SID_TRI = $10
+SID_SAW = $20
+SID_PUL = $40
+SID_NOI = $80
+SID_GATE = $01
+
+.segment "BSS"
+
+sid_fl:   .res 3
+sid_fh:   .res 3
+sid_pl:   .res 3
+sid_ph:   .res 3
+sid_ct:   .res 3
+sid_ad:   .res 3
+sid_sr:   .res 3
+sid_mv:   .res 1
+sid_mode: .res 1
+; Player. Three voices, three tune slots of 48 bytes, eight instruments.
+ins_wave: .res 8
+ins_ad:   .res 8
+ins_sr:   .res 8
+ins_pw:   .res 8
+v_mode:   .res 3
+v_left:   .res 3
+v_pos:    .res 3
+v_oct:    .res 3
+v_ins:    .res 3
+v_len:    .res 3
+v_ptr:    .res 3
+v_ptrh:   .res 3
+tune_buf: .res 3*48
+
+.segment "CODE"
+
+.export sid_init
+.export sid_freq_on
+.export sid_gate_off
+.export sid_wave
+.export sid_pulse
+.export sid_adsr
+.export sid_vol
+.export sid_filter
+.export sid_quiet
+.export sid_mode
+.export sid_hold
+.export sid_tmp
+.export sid_arg
+.export sid_tick
+.export sid_set_tempo
+.export sid_set_env
+.export sid_voice_wave
+.export sid_sound
+.export sid_tune
+.export sid_play
+.export sid_loop
+.export sid_stop
+.export sid_effect
+
+sid_base:
+        .byte 0, 7, 14
+
+sid_waves:
+        .byte SID_TRI, SID_SAW, SID_PUL, SID_NOI
+
+; Sawtooth, pulse width 2048, attack 0, sustain 15, gate closed, volume 0.
+sid_init:
+        ldx #2
+@voice: lda #0
+        sta sid_fl,x
+        sta sid_fh,x
+        sta sid_pl,x
+        sta sid_ad,x
+        lda #$08
+        sta sid_ph,x
+        lda #SID_SAW
+        sta sid_ct,x
+        lda #$f0
+        sta sid_sr,x
+        jsr sid_flush
+        dex
+        bpl @voice
+        lda #0
+        sta sid_fclo
+        sta sid_fchi
+        sta sid_res
+        sta sid_mv
+        sta sid_mode
+        jsr sid_flush_f
+        ldx #0
+@pre:   txa
+        asl
+        asl
+        tay
+        lda presets,y
+        sta ins_wave,x
+        iny
+        lda presets,y
+        sta ins_ad,x
+        iny
+        lda presets,y
+        sta ins_sr,x
+        iny
+        lda presets,y
+        sta ins_pw,x
+        inx
+        cpx #8
+        bne @pre
+        ldx #2
+@clr:   lda #0
+        sta v_mode,x
+        sta v_pos,x
+        dex
+        bpl @clr
+        ldy #0
+        lda #0
+@tb:    sta tune_buf,y
+        iny
+        cpy #144
+        bne @tb
+        ldx #2
+@vi:    lda #0
+        sta v_ins,x
+        jsr apply_ins
+        dex
+        bpl @vi
+        lda #8
+        jsr sid_set_tempo
+        lda #15
+        jsr sid_vol
+        lda #%01000000
+        sta VIA2_ACR
+        lda #<20000
+        sta VIA2_T1CL
+        lda #>20000
+        sta VIA2_T1CH
+        lda #%11000000
+        sta VIA2_IER
+        rts
+
+; X = voice 0..2, A = frequency low, Y = frequency high. Opens the gate.
+sid_freq_on:
+        sta sid_fl,x
+        tya
+        sta sid_fh,x
+        lda sid_ct,x
+        ora #SID_GATE
+        sta sid_ct,x
+        jmp sid_flush
+
+; X = voice 0..2. Closes the gate. Frequency and waveform stay.
+sid_gate_off:
+        lda sid_ct,x
+        and #$ff-SID_GATE
+        sta sid_ct,x
+        jmp sid_flush
+
+sid_quiet:
+        ldx #2
+@off:   jsr sid_gate_off
+        dex
+        bpl @off
+        rts
+
+; X = voice 0..2, A = waveform 1..4. The gate bit is kept.
+sid_wave:
+        tay
+        lda sid_ct,x
+        and #SID_GATE
+        ora sid_waves-1,y
+        sta sid_ct,x
+        jmp sid_flush
+
+; X = voice 0..2, A = low byte, Y = high nibble (0..15).
+sid_pulse:
+        sta sid_pl,x
+        tya
+        and #$0f
+        sta sid_ph,x
+        jmp sid_flush
+
+; X = voice 0..2, A = attack/decay, Y = sustain/release.
+sid_adsr:
+        sta sid_ad,x
+        tya
+        sta sid_sr,x
+        jmp sid_flush
+
+; A = volume 0..15. Filter mode bits in sid_mv stay.
+sid_vol:
+        and #$0f
+        sta sid_tmp
+        lda sid_mv
+        and #$f0
+        ora sid_tmp
+        sta sid_mv
+        php
+        sei
+        sta SID+$18
+        plp
+        rts
+
+; A = cutoff bits 0..7, Y = bits 8..10, X = resonance 0..15.
+; sid_mode bit 0 low-pass, bit 1 band-pass, bit 2 high-pass.
+; Any mode routes all three voices through the filter. None leaves them dry.
+sid_filter:
+        sta sid_tmp
+        and #$07
+        sta sid_fclo
+        lda sid_tmp
+        lsr
+        lsr
+        lsr
+        sta sid_fchi
+        tya
+        asl
+        asl
+        asl
+        asl
+        asl
+        ora sid_fchi
+        sta sid_fchi
+        txa
+        asl
+        asl
+        asl
+        asl
+        sta sid_res
+        lda sid_mode
+        beq @dry
+        lda #$07
+@dry:   ora sid_res
+        sta sid_res
+        lda sid_mode
+        asl
+        asl
+        asl
+        asl
+        sta sid_tmp
+        lda sid_mv
+        and #$0f
+        ora sid_tmp
+        sta sid_mv
+        jmp sid_flush_f
+
+; X = voice. Writes that voice's seven shadow bytes.
+sid_flush:
+        php
+        sei
+        ldy sid_base,x
+        lda sid_fl,x
+        sta SID,y
+        iny
+        lda sid_fh,x
+        sta SID,y
+        iny
+        lda sid_pl,x
+        sta SID,y
+        iny
+        lda sid_ph,x
+        sta SID,y
+        iny
+        lda sid_ct,x
+        sta SID,y
+        iny
+        lda sid_ad,x
+        sta SID,y
+        iny
+        lda sid_sr,x
+        sta SID,y
+        plp
+        rts
+
+sid_flush_f:
+        php
+        sei
+        lda sid_fclo
+        sta SID+$15
+        lda sid_fchi
+        sta SID+$16
+        lda sid_res
+        sta SID+$17
+        lda sid_mv
+        sta SID+$18
+        plp
+        rts
+
+; 50 Hz. One step per voice. Does not touch BASIC zero page except sid_ptr.
+sid_tick:
+        ldx #0
+@v:     lda v_mode,x
+        beq @nx
+        dec v_left,x
+        bne @nx
+        jsr voice_advance
+@nx:    inx
+        cpx #3
+        bne @v
+        rts
+
+voice_advance:
+        jsr sid_gate_off
+        lda v_mode,x
+        cmp #1
+        bne @tune
+        jmp voice_stop
+@tune:  cmp #3
+        bne @notes
+        jmp fx_step
+@notes: jmp parse_note
+
+voice_stop:
+        lda #0
+        sta v_mode,x
+        jmp sid_gate_off
+
+; A = sixteenths per second, 1..50. Stored as 50 Hz ticks per sixteenth.
+sid_set_tempo:
+        sta sid_tmp
+        lda #50
+        ldy #0
+@div:   cmp sid_tmp
+        bcc @st
+        sec
+        sbc sid_tmp
+        iny
+        bne @div
+@st:    cpy #0
+        bne @ok
+        iny
+@ok:    sty tempo_n
+        rts
+
+; X = instrument 0..7, A = attack/decay, Y = sustain/release. Wave stays.
+sid_set_env:
+        sta ins_ad,x
+        tya
+        sta ins_sr,x
+        rts
+
+; X = voice 0..2, A = form 0..3 (triangle, saw, pulse, noise).
+sid_voice_wave:
+        clc
+        adc #1
+        jmp sid_wave
+
+; X = voice, Y = sixteenths, A = instrument or $80 to keep the voice.
+; sid_hold = frequency register. Replaces whatever that voice was playing.
+sid_sound:
+        php
+        sei
+        pha
+        tya
+        sta v_len,x
+        pla
+        cmp #$80
+        beq @keep
+        sta v_ins,x
+        jsr apply_ins
+@keep:  lda #1
+        sta v_mode,x
+        lda sid_hold
+        ldy sid_hold+1
+        jsr sid_freq_on
+        jsr arm_left
+        plp
+        rts
+
+; X = slot 0..2, Y = length, sid_hold = source. Copies at most 47 bytes.
+; Carry set when the string does not fit. Stops that voice.
+sid_tune:
+        php
+        sei
+        cpy #48
+        bcc @ok
+        plp
+        sec
+        rts
+@ok:    tya
+        pha
+        lda #0
+        sta v_mode,x
+        jsr sid_gate_off
+        lda sid_hold
+        sta sid_src
+        lda sid_hold+1
+        sta sid_src+1
+        jsr point_tune
+        pla
+        sta sid_tmp
+        ldy #0
+@cp:    cpy sid_tmp
+        beq @nul
+        lda (sid_src),y
+        sta (sid_ptr),y
+        iny
+        bne @cp
+@nul:   lda #0
+        sta (sid_ptr),y
+        plp
+        clc
+        rts
+
+; A = 0 stops every voice. A = 1..3 starts that tune now.
+sid_play:
+        php
+        sei
+        cmp #0
+        bne @one
+        jsr sid_quiet
+        ldx #2
+@zm:    lda #0
+        sta v_mode,x
+        dex
+        bpl @zm
+        plp
+        rts
+@one:   sec
+        sbc #1
+        tax
+        jsr bind_tune
+        jsr load_ptr
+        ldy #0
+        lda (sid_ptr),y
+        bne @go
+        lda #0
+        sta v_mode,x
+        jsr sid_gate_off
+        plp
+        rts
+@go:    lda #2
+        sta v_mode,x
+        jmp play_arm
+; A = 1..3. Same as sid_play, but the tune restarts when it ends.
+sid_loop:
+        php
+        sei
+        sec
+        sbc #1
+        tax
+        jsr bind_tune
+        jsr load_ptr
+        ldy #0
+        lda (sid_ptr),y
+        bne @go
+        lda #0
+        sta v_mode,x
+        jsr sid_gate_off
+        plp
+        rts
+@go:    lda #4
+        sta v_mode,x
+        jmp play_arm
+; A = 1..3. Stop that voice. The others keep playing.
+sid_stop:
+        php
+        sei
+        sec
+        sbc #1
+        tax
+        lda #0
+        sta v_mode,x
+        jsr sid_gate_off
+        plp
+        rts
+play_arm:
+        lda #0
+        sta v_pos,x
+        sta v_ins,x
+        lda #4
+        sta v_oct,x
+        sta v_len,x
+        jsr parse_note
+        plp
+        rts
+
+; A = 1 shot, 2 explosion, 3 laser, 4 jump, 5 coin, 6 power-up, 7 error,
+; 8 siren, 9 falling bomb. Always voice 3.
+sid_effect:
+        php
+        sei
+        sec
+        sbc #1
+        asl
+        tay
+        ldx #2
+        lda fx_tab,y
+        sta v_ptr,x
+        lda fx_tab+1,y
+        sta v_ptrh,x
+        lda #3
+        sta v_mode,x
+        lda #0
+        sta v_pos,x
+        jsr fx_header
+        jsr fx_step
+        plp
+        rts
+
+parse_note:
+@ag:    jsr fetch
+        bne @go
+        lda v_mode,x
+        cmp #4
+        bne @stop
+        lda #5
+        sta v_mode,x
+        lda #0
+        sta v_pos,x
+        sta v_ins,x
+        lda #4
+        sta v_oct,x
+        sta v_len,x
+        jmp @ag
+@stop:  jmp voice_stop
+@go:    cmp #' '
+        beq @ag
+        cmp #'O'
+        beq @oct
+        cmp #'I'
+        beq @ins
+        cmp #'L'
+        beq @dur
+        cmp #'R'
+        beq @rest
+        cmp #'A'
+        bcc @bad
+        cmp #'H'
+        bcc @note
+@bad:   jmp voice_stop
+@note:
+        sec
+        sbc #'A'
+        tay
+        lda semis,y
+        sta sid_tmp
+        jsr peek
+        cmp #'#'
+        bne @octd
+        inc v_pos,x
+        inc sid_tmp
+@octd:  jsr need_digit
+        bcs @wrap
+        sta v_oct,x
+@wrap:  lda sid_tmp
+        cmp #12
+        bcc @tone
+        lda #0
+        sta sid_tmp
+        inc v_oct,x
+        lda v_oct,x
+        cmp #9
+        bcc @tone
+        lda #8
+        sta v_oct,x
+@tone:  jsr tune_live
+        jsr apply_ins
+        jsr freq_semi
+        jsr sid_freq_on
+        jmp arm_left
+@oct:   jsr need_digit
+        bcc @seto
+        jmp voice_stop
+@seto:  sta v_oct,x
+        jmp @ag
+@ins:   jsr need_digit
+        bcc @seti
+        jmp voice_stop
+@seti:
+        sta v_ins,x
+        jmp @ag
+@dur:   jsr take_len
+        jmp @ag
+@rest:  jsr take_len
+        jsr tune_live
+        jsr sid_gate_off
+        jmp arm_left
+
+; A looping tune is marked 5 while it restarts, then 4 again once a
+; note or a rest is actually played. Two empty passes stop the voice.
+tune_live:
+        lda v_mode,x
+        cmp #5
+        bne @d
+        lda #4
+        sta v_mode,x
+@d:     rts
+
+; Next tune character in A, folded to upper case. Z set at the end.
+fetch:
+        lda v_pos,x
+        cmp #48
+        bcs @end
+        tay
+        jsr load_ptr
+        lda (sid_ptr),y
+        beq @end
+        inc v_pos,x
+        cmp #'a'
+        bcc @ok
+        cmp #'z'+1
+        bcs @ok
+        and #$df
+@ok:    rts
+@end:   lda #0
+        rts
+
+peek:
+        lda v_pos,x
+        cmp #48
+        bcs fetch_end
+        tay
+        jsr load_ptr
+        lda (sid_ptr),y
+        cmp #'a'
+        bcc @ok
+        cmp #'z'+1
+        bcs @ok
+        and #$df
+@ok:    rts
+fetch_end:
+        lda #0
+        rts
+
+; Digit 0..7 in A. Carry set when the next character is not that digit.
+need_digit:
+        jsr peek
+        cmp #'0'
+        bcc @bad
+        cmp #'8'
+        bcs @bad
+        inc v_pos,x
+        sec
+        sbc #'0'
+        clc
+        rts
+@bad:   sec
+        rts
+
+; Reads an optional length 1..8. 0 means 1, 9 and above mean 8.
+take_len:
+        jsr peek
+        cmp #'0'
+        bcc @keep
+        cmp #'9'+1
+        bcs @keep
+        inc v_pos,x
+        sec
+        sbc #'0'
+        bne @nz
+        lda #1
+@nz:    cmp #9
+        bcc @put
+        lda #8
+@put:   sta v_len,x
+@keep:  lda v_len,x
+        bne @ok
+        lda #1
+        sta v_len,x
+@ok:    rts
+
+apply_ins:
+        ldy v_ins,x
+        lda ins_wave,y
+        jsr sid_wave
+        ldy v_ins,x
+        lda ins_ad,y
+        pha
+        lda ins_sr,y
+        tay
+        pla
+        jsr sid_adsr
+        ldy v_ins,x
+        lda ins_pw,y
+        tay
+        lda #0
+        jmp sid_pulse
+
+; sid_tmp = semitone 0..11. Returns frequency in A (low) and Y (high).
+freq_semi:
+        ldy sid_tmp
+        lda note_lo,y
+        sta sid_hold
+        lda note_hi,y
+        sta sid_hold+1
+        lda v_oct,x
+        cmp #4
+        beq @out
+        bcc @down
+        sec
+        sbc #4
+        sta sid_tmp
+@up:    asl sid_hold
+        rol sid_hold+1
+        bcs @sat
+        dec sid_tmp
+        bne @up
+        beq @out
+@sat:   lda #$ff
+        sta sid_hold
+        sta sid_hold+1
+        bne @out
+@down:  lda #4
+        sec
+        sbc v_oct,x
+        sta sid_tmp
+@dn:    lsr sid_hold+1
+        ror sid_hold
+        dec sid_tmp
+        bne @dn
+@out:   lda sid_hold
+        ldy sid_hold+1
+        rts
+
+arm_left:
+        lda #0
+        ldy v_len,x
+@m:     clc
+        adc tempo_n
+        bcs @cap
+        dey
+        bne @m
+        cmp #0
+        bne @st
+        lda #1
+@st:    sta v_left,x
+        rts
+@cap:   lda #$ff
+        bne @st
+
+fx_header:
+        jsr load_ptr
+        ldy #0
+        lda (sid_ptr),y
+        jsr sid_wave
+        jsr load_ptr
+        ldy #1
+        lda (sid_ptr),y
+        pha
+        iny
+        lda (sid_ptr),y
+        tay
+        pla
+        jsr sid_adsr
+        jsr load_ptr
+        ldy #3
+        lda (sid_ptr),y
+        tay
+        lda #0
+        jsr sid_pulse
+        lda #4
+        sta v_pos,x
+        rts
+
+fx_step:
+        jsr load_ptr
+        ldy v_pos,x
+        lda (sid_ptr),y
+        bne @on
+        jmp voice_stop
+@on:    sta v_len,x
+        iny
+        lda (sid_ptr),y
+        sta sid_hold+1
+        iny
+        lda (sid_ptr),y
+        sta sid_hold
+        iny
+        tya
+        sta v_pos,x
+        lda sid_hold
+        ldy sid_hold+1
+        jsr sid_freq_on
+        lda v_len,x
+        sta v_left,x
+        rts
+
+load_ptr:
+        lda v_ptr,x
+        sta sid_ptr
+        lda v_ptrh,x
+        sta sid_ptr+1
+        rts
+
+point_tune:
+        lda #<tune_buf
+        sta sid_ptr
+        lda #>tune_buf
+        sta sid_ptr+1
+        stx sid_tmp
+        lda sid_tmp
+        beq @d
+@a:     clc
+        lda sid_ptr
+        adc #48
+        sta sid_ptr
+        bcc @h
+        inc sid_ptr+1
+@h:     dec sid_tmp
+        bne @a
+@d:     rts
+
+bind_tune:
+        lda #<tune_buf
+        sta v_ptr,x
+        lda #>tune_buf
+        sta v_ptrh,x
+        txa
+        beq @d
+        tay
+@a:     clc
+        lda v_ptr,x
+        adc #48
+        sta v_ptr,x
+        bcc @h
+        inc v_ptrh,x
+@h:     dey
+        bne @a
+@d:     rts
+
+; wave, attack/decay, sustain/release, pulse high nibble.
+; 0 organ, 1 piano, 2 bass, 3 noise. 4..7 repeat the organ.
+presets:
+        .byte 1, $00, $f0, 8
+        .byte 2, $09, $00, 8
+        .byte 3, $08, $80, 4
+        .byte 4, $00, $f1, 8
+        .byte 1, $00, $f0, 8
+        .byte 1, $00, $f0, 8
+        .byte 1, $00, $f0, 8
+        .byte 1, $00, $f0, 8
+
+semis:
+        .byte 9, 11, 0, 2, 4, 5, 7
+
+note_lo:
+        .byte $25, $2a, $3f, $64, $9a, $e3, $3f, $b1, $38, $d6, $8d, $5e
+note_hi:
+        .byte $11, $12, $13, $14, $15, $16, $18, $19, $1b, $1c, $1e, $20
+
+fx_tab:
+        .addr fx_shot, fx_boom, fx_laser, fx_jump, fx_coin
+        .addr fx_power, fx_error, fx_siren, fx_fall
+
+; Duration is in 20 ms ticks, then frequency high, frequency low. 0 ends.
+fx_shot:
+        .byte 4, $04, $08, 8
+        .byte 1, $c0, $00
+        .byte 1, $80, $00
+        .byte 2, $40, $00
+        .byte 2, $20, $00
+        .byte 3, $10, $00
+        .byte 0
+fx_boom:
+        .byte 4, $0c, $0a, 8
+        .byte 3, $50, $00
+        .byte 4, $30, $00
+        .byte 6, $20, $00
+        .byte 8, $10, $00
+        .byte 10, $08, $00
+        .byte 12, $04, $00
+        .byte 0
+fx_laser:
+        .byte 2, $00, $f2, 8
+        .byte 1, $70, $00
+        .byte 1, $60, $00
+        .byte 1, $50, $00
+        .byte 1, $40, $00
+        .byte 1, $30, $00
+        .byte 2, $20, $00
+        .byte 2, $10, $00
+        .byte 0
+fx_jump:
+        .byte 3, $00, $a0, 8
+        .byte 1, $08, $00
+        .byte 1, $0a, $00
+        .byte 1, $0c, $00
+        .byte 1, $0f, $00
+        .byte 1, $12, $00
+        .byte 1, $16, $00
+        .byte 1, $1b, $00
+        .byte 1, $20, $00
+        .byte 0
+; B5, then E6 fading out.
+fx_coin:
+        .byte 3, $09, $00, 8
+        .byte 4, $40, $bc
+        .byte 25, $56, $69
+        .byte 0
+; C5 E5 G5 C6 E6 G6 C7.
+fx_power:
+        .byte 1, $00, $f0, 8
+        .byte 3, $22, $4b
+        .byte 3, $2b, $35
+        .byte 3, $33, $61
+        .byte 3, $44, $95
+        .byte 3, $56, $69
+        .byte 3, $66, $c2
+        .byte 8, $89, $2b
+        .byte 0
+; G3, then C#3.
+fx_error:
+        .byte 2, $00, $f4, 8
+        .byte 8, $0c, $d8
+        .byte 20, $09, $15
+        .byte 0
+fx_siren:
+        .byte 1, $00, $f0, 8
+        .byte 2, $20, $00
+        .byte 2, $24, $00
+        .byte 2, $28, $00
+        .byte 2, $2c, $00
+        .byte 2, $30, $00
+        .byte 2, $2c, $00
+        .byte 2, $28, $00
+        .byte 2, $24, $00
+        .byte 2, $20, $00
+        .byte 2, $24, $00
+        .byte 2, $28, $00
+        .byte 2, $2c, $00
+        .byte 2, $30, $00
+        .byte 2, $2c, $00
+        .byte 2, $28, $00
+        .byte 2, $24, $00
+        .byte 0
+fx_fall:
+        .byte 1, $00, $f2, 8
+        .byte 2, $50, $00
+        .byte 2, $4c, $00
+        .byte 2, $48, $00
+        .byte 2, $44, $00
+        .byte 2, $40, $00
+        .byte 2, $3c, $00
+        .byte 2, $38, $00
+        .byte 2, $34, $00
+        .byte 2, $30, $00
+        .byte 2, $2c, $00
+        .byte 2, $28, $00
+        .byte 2, $24, $00
+        .byte 2, $20, $00
+        .byte 2, $1c, $00
+        .byte 2, $18, $00
+        .byte 0

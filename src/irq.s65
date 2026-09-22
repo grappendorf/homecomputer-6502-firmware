@@ -1,0 +1,62 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; VIA1 timer 1 free-runs at 10 ms. After 100 ticks the reset lamp goes off
+; but the timer keeps running so the serial monitor can drain TX.
+; VIA2 timer 1 free-runs at 20 ms for the SID player. BASIC keeps running.
+
+.include "io.inc65"
+
+.import led_off
+.import sid_tick
+.import mon_irq
+
+.include "zp.inc65"
+
+.segment "CODE"
+
+.export irq_init
+.export irq
+
+irq_init:
+        lda #100
+        sta led_ticks
+        lda #%01000000
+        sta VIA1_ACR
+        lda #<10000
+        sta VIA1_T1CL
+        lda #>10000
+        sta VIA1_T1CH
+        lda #%11000000
+        sta VIA1_IER
+        rts
+
+irq:
+        pha
+        txa
+        pha
+        tya
+        pha
+        cld
+        lda VIA1_IFR
+        and #%01000000
+        beq @sid
+        lda VIA1_T1CL
+        lda led_ticks
+        beq @sid
+        dec led_ticks
+        bne @sid
+        jsr led_off
+@sid:   lda VIA2_IFR
+        and #%01000000
+        beq @mon
+        lda VIA2_T1CL
+        jsr sid_tick
+@mon:   jsr mon_irq
+@out:   pla
+        tay
+        pla
+        tax
+        pla
+        rti

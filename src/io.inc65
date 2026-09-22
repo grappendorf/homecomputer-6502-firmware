@@ -1,0 +1,70 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+
+ACIA_DATA = $7F00
+ACIA_STAT = $7F01
+ACIA_CMD  = $7F02
+ACIA_CTRL = $7F03
+ACIA_RX   = $08
+ACIA_TX   = $10
+; Command $09: DTR low, RX IRQ on (bit 1 = 0), TX IRQ off.
+; Command $0B: same, but RX IRQ off so a disk transfer can poll the data register.
+ACIA_CMD_ON   = $09
+ACIA_CMD_POLL = $0B
+
+VIA1_ORB  = $7F20
+VIA1_ORA  = $7F21
+VIA1_DDRB = $7F22
+VIA1_DDRA = $7F23
+VIA1_T1CL = $7F24
+VIA1_T1CH = $7F25
+VIA1_ACR  = $7F2B
+VIA1_IER  = $7F2E
+
+VIA2_ORB  = $7F40
+VIA2_IRA  = $7F41
+VIA2_DDRB = $7F42
+VIA2_DDRA = $7F43
+VIA2_T1CL = $7F44
+VIA2_T1CH = $7F45
+VIA2_ACR  = $7F4B
+VIA2_IFR  = $7F4D
+VIA2_IER  = $7F4E
+VIA1_IFR  = $7F2D
+
+LCD_RS    = $10
+LCD_E1    = $20
+LCD_E2    = $40
+LCD_LED   = $80
+LCD_E_MASK = LCD_E1 | LCD_E2
+; CGRAM slots. $00 would end a BASIC line. $03 cancels a line.
+; $0B shows the same pattern as slot 3.
+LCD_MU    = $01
+LCD_ACUTE = $02
+LCD_EURO  = $0B
+LCD_DEG   = $DF
+LCD_SUP2  = $07
+LCD_SUP3  = $04
+LCD_BS    = $05
+LCD_TILDE = $06
+
+MOD_SHIFT = $01
+MOD_CTRL  = $02
+MOD_ALT   = $04
+MOD_CAPS  = $08               ;Caps Lock latched on (toggled by each press)
+MOD_ALTGR = $10
+MOD_CAPSKEY = $80             ;Caps key held, debounced. Only for the latch.
+
+KEY_BREAK = $3E
+KEY_C     = $0E
+
+; Line editor. Not printable, and not $03 (Break) or $08 (Backspace).
+ED_LEFT  = $11
+ED_RIGHT = $12
+ED_UP    = $13
+ED_DOWN  = $14
+ED_HOME  = $15
+ED_END   = $16
+ED_DEL   = $17
+ED_INS   = $18

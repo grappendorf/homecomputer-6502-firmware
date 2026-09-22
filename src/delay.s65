@@ -1,0 +1,66 @@
+; HomeComputer 6502 firmware
+; Copyright (c) 2026 Dirk Grappendorf
+; SPDX-License-Identifier: MIT
+;
+; Busy-wait delays for the 1 MHz 6502. Used by the LCD (R/W tied to GND,
+; so the busy flag cannot be read) and by keyboard debounce.
+
+.import HCISCNTC
+
+.include "zp.inc65"
+
+.segment "CODE"
+
+.export delay_ms
+.export sleep_ms
+
+; In: A = milliseconds (0 returns immediately). Clobbers A, X, Y.
+delay_ms:
+        tax
+        beq @done
+@ms:    ldy #196
+@loop:  dey
+        bne @loop
+        dex
+        bne @ms
+@done:  rts
+
+; A = low, X = middle, Y = high byte of a millisecond count. Zero returns
+; at once. Break or Ctrl+C aborts with Z set. Otherwise Z is clear.
+; The wait is the calibrated millisecond loop, plus a keyboard scan before
+; every 100 ms, so a long pause can be interrupted.
+sleep_ms:
+        sta sleep_lo
+        stx sleep_mid
+        sty sleep_hi
+@more:  lda sleep_lo
+        ora sleep_mid
+        ora sleep_hi
+        beq @ok
+        jsr HCISCNTC
+        beq @abort
+        lda sleep_hi
+        ora sleep_mid
+        bne @hund
+        lda sleep_lo
+        cmp #100
+        bcc @rest
+@hund:  lda #100
+        jsr delay_ms
+        sec
+        lda sleep_lo
+        sbc #100
+        sta sleep_lo
+        lda sleep_mid
+        sbc #0
+        sta sleep_mid
+        lda sleep_hi
+        sbc #0
+        sta sleep_hi
+        jmp @more
+@rest:  lda sleep_lo
+        jsr delay_ms
+@ok:    lda #1
+        rts
+@abort: lda #0
+        rts

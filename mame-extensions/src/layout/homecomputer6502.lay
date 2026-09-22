@@ -1,0 +1,1402 @@
+<?xml version="1.0"?>
+<!-- license:MIT -->
+<!-- HomeComputer 6502 - case + keyboard artwork with the live LCD composited in.
+     Key positions match docs/keyboard-matrix.md section 4 (physical layout). -->
+<mamelayout version="2">
+
+	<element name="hc_case">
+		<rect><color alpha="0" /><bounds x="0" y="0" width="1120" height="640" /></rect>
+		<!-- outer case: wider, less tall than before, matching the real unit's squat proportions -->
+		<rect>
+			<color red="0.886" green="0.349" blue="0.059" />
+			<bounds x="20" y="20" width="1080" height="600" />
+		</rect>
+		<!-- recessed top panel (LCD + speakers) -->
+		<rect>
+			<color red="0.722" green="0.267" blue="0.039" />
+			<bounds x="42" y="42" width="1036" height="190" />
+		</rect>
+		<!-- LCD window. Same blue as the panel, visible as a 4px rim around the screen. -->
+		<rect>
+			<color red="0.118" green="0.196" blue="0.549" />
+			<bounds x="270" y="66" width="580" height="140" />
+		</rect>
+	</element>
+
+	<element name="hc_grille">
+		<rect><color red="0.125" green="0.114" blue="0.102" /><bounds x="0" y="0" width="16" height="16" /></rect>
+	</element>
+
+	<!-- status LED (VIA1 PA7, see system-spec.md 5.7 / homecomputer6502.cpp via1_pa_w), built into
+	     the top-right hole of the right speaker grille -->
+	<element name="hc_led" defstate="0">
+		<disk state="0">
+			<color red="0.28" green="0.05" blue="0.03" />
+		</disk>
+		<disk state="1">
+			<color red="1.0" green="0.18" blue="0.05" />
+		</disk>
+	</element>
+
+	<!-- Invisible-until-pressed overlay for every clickable key: transparent at rest, a cool
+	     blue while held, so mouse clicks on the drawn keyboard actually
+	     drive the emulated ROWn keyboard-matrix ioports (see INPUT_PORTS_START in
+	     homecomputer6502.cpp for the tag/bit -> key assignment this mirrors). -->
+	<element name="hc_key" defstate="0">
+		<rect state="0">
+			<color alpha="0" />
+		</rect>
+		<rect state="1">
+			<color red="0.45" green="0.62" blue="0.78" alpha="0.62" />
+		</rect>
+	</element>
+
+	<element name="hc_keyboard">
+		<rect><color alpha="0" /><bounds x="0" y="0" width="1120" height="640" /></rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="70.0" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="Esc">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="96.5" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="127.9" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F1">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="154.4" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="185.9" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F2">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="212.4" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="243.8" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F3">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="270.3" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="301.8" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F4">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="328.2" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="359.7" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F5">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="386.2" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="417.6" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F6">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="444.1" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="475.6" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F7">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="502.1" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="533.5" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F8">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="560.0" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="591.5" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F9">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="617.9" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="649.4" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F10">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="675.9" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="707.4" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F11">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="733.8" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="765.3" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="F12">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="791.8" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="823.2" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="Num">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="849.7" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="881.2" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="Druck">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="907.6" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="939.1" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="Rollen">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="965.6" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="997.1" y="270.0" width="52.9" height="46" />
+		</rect>
+		<text string="Pause">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="1023.5" yc="293.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="70.0" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="°">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="98.1" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="^">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="98.1" yc="354.0" width="20" height="18" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="131.1" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="!">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="159.2" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="1">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="159.2" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="192.2" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="&quot;">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="209.3" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="²">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="231.3" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="2">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="220.3" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="253.3" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="§">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="270.4" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="³">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="292.4" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="3">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="281.4" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="314.4" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="$">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="342.5" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="4">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="342.5" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="375.5" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="%">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="403.6" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="5">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="403.6" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="436.6" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="&amp;">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="464.7" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="6">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="464.7" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="497.7" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="/">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="514.8" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="{">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="536.8" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="7">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="525.8" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="558.8" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="(">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="575.9" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="[">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="597.9" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="8">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="586.9" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="619.9" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string=")">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="637.0" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="]">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="659.0" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="9">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="648.0" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="681.0" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="=">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="698.1" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="}">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="720.1" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="0">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="709.1" yc="355.0" width="28" height="22" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="742.1" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="?">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="759.2" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="\">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="781.2" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="ß">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="759.2" yc="354.0" width="20" height="18" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="803.2" y="321.0" width="56.1" height="46" />
+		</rect>
+		<text string="`">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="831.3" yc="334.0" width="20" height="18" />
+		</text>
+		<text string="´">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="831.3" yc="354.0" width="20" height="18" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="864.3" y="321.0" width="127.8" height="46" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="912.0" y="343.0" width="0.7" height="2.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="912.5" y="343.0" width="0.7" height="2.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="913.0" y="343.0" width="0.7" height="2.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="913.5" y="342.7" width="0.7" height="2.7" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="914.0" y="342.3" width="0.7" height="3.3" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="914.5" y="342.0" width="0.7" height="4.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="915.0" y="341.7" width="0.7" height="4.7" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="915.5" y="341.3" width="0.7" height="5.3" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="916.0" y="341.0" width="0.7" height="6.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="916.5" y="340.7" width="0.7" height="6.7" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="917.0" y="340.3" width="0.7" height="7.3" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="917.5" y="340.0" width="0.7" height="8.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="918.0" y="339.7" width="0.7" height="8.7" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="918.5" y="339.3" width="0.7" height="9.3" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="919.0" y="339.0" width="0.7" height="10.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="919.5" y="338.7" width="0.7" height="10.7" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="920.0" y="338.3" width="0.7" height="11.3" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="920.5" y="338.0" width="0.7" height="12.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="921.0" y="337.7" width="0.7" height="12.7" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="921.5" y="337.3" width="0.7" height="13.3" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="922.0" y="337.0" width="0.7" height="14.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="922.5" y="336.7" width="0.7" height="14.7" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="923.0" y="336.3" width="0.7" height="15.3" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="923.5" y="336.0" width="0.7" height="16.0" />
+		</rect>
+		<rect>
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds x="923.7" y="340.4" width="22.3" height="7.2" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="915.0" y="343.4" width="0.7" height="1.3" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="915.5" y="343.0" width="0.7" height="1.9" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="916.0" y="342.7" width="0.7" height="2.6" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="916.5" y="342.4" width="0.7" height="3.3" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="917.0" y="342.0" width="0.7" height="3.9" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="917.5" y="341.7" width="0.7" height="4.6" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="918.0" y="341.4" width="0.7" height="5.3" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="918.5" y="341.0" width="0.7" height="5.9" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="919.0" y="340.7" width="0.7" height="6.6" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="919.5" y="340.4" width="0.7" height="7.3" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="920.0" y="340.0" width="0.7" height="7.9" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="920.5" y="339.7" width="0.7" height="8.6" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="921.0" y="339.4" width="0.7" height="9.3" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="921.5" y="339.0" width="0.7" height="9.9" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="922.0" y="338.7" width="0.7" height="10.6" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="922.5" y="338.4" width="0.7" height="11.3" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="923.0" y="338.0" width="0.7" height="11.9" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="923.5" y="337.7" width="0.7" height="12.6" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="925.4" y="342.1" width="18.9" height="3.8" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="997.1" y="321.0" width="52.9" height="46" />
+		</rect>
+		<text string="Pos1">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="1023.5" yc="344.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="70.0" y="372.0" width="125.4" height="46" />
+		</rect>
+		<text string="Tab">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="132.7" yc="395.0" width="117.4" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="200.4" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="Q">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="226.9" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<text string="@">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="245.8" yc="410.5" width="11" height="11" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="258.4" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="W">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="284.8" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="316.3" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="E">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="342.8" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<text string="€">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="361.2" yc="410.5" width="11" height="11" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="374.2" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="R">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="400.7" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="432.2" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="T">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="458.6" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="490.1" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="Z">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="516.6" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="548.1" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="U">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="574.5" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="606.0" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="I">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="632.5" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="663.9" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="O">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="690.4" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="721.9" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="P">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="748.4" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="779.8" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="Ü">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="806.3" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="837.8" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="*">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="854.2" yc="385.0" width="14" height="16" />
+		</text>
+		<text string="~">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="874.2" yc="385.0" width="14" height="16" />
+		</text>
+		<text string="+">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="854.2" yc="403.0" width="14" height="16" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="895.7" y="372.0" width="96.4" height="46" />
+		</rect>
+		<text string="Enter">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="943.9" yc="395.0" width="88.4" height="25.3" />
+		</text>
+		<!-- bridges the row gap only under the narrower bottom half, so the two halves read as one key without overhanging the # key to the left -->
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="910.2" y="418.0" width="81.9" height="5" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="997.1" y="372.0" width="52.9" height="46" />
+		</rect>
+		<text string="↑">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="1023.5" yc="395.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="70.0" y="423.0" width="139.9" height="46" />
+		</rect>
+		<text string="Caps">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="140.0" yc="446.0" width="131.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="214.9" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="A">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="241.4" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="272.8" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="S">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="299.3" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="330.8" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="D">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="357.3" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="388.7" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="F">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="415.2" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="446.7" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="G">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="473.1" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="504.6" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="H">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="531.1" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="562.5" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="J">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="589.0" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="620.5" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="K">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="647.0" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="678.4" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="L">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="704.9" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="736.4" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="Ö">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="762.8" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="794.3" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="Ä">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="820.8" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="852.3" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="'">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="878.7" yc="436.0" width="20" height="16" />
+		</text>
+		<text string="#">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="878.7" yc="454.0" width="20" height="16" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="910.2" y="423.0" width="81.9" height="46" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="997.1" y="423.0" width="52.9" height="46" />
+		</rect>
+		<text string="↓">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="1023.5" yc="446.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="70.0" y="474.0" width="183.5" height="46" />
+		</rect>
+		<text string="Shift">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="161.8" yc="497.0" width="175.5" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="258.5" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="Y">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="285.0" yc="497.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="316.4" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="X">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="342.9" yc="497.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="374.3" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="C">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="400.8" yc="497.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="432.2" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="V">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="458.7" yc="497.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="490.1" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="B">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="516.6" yc="497.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="548.0" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="N">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="574.5" yc="497.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="605.9" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="M">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="632.4" yc="497.0" width="44.9" height="25.3" />
+		</text>
+		<text string="µ">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="650.8" yc="512.5" width="11" height="11" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="663.8" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string=";">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="690.3" yc="487.0" width="20" height="16" />
+		</text>
+		<text string=",">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="690.3" yc="505.0" width="20" height="16" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="721.7" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string=":">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="748.2" yc="487.0" width="20" height="16" />
+		</text>
+		<text string=".">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="748.2" yc="505.0" width="20" height="16" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="779.6" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="_">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="806.1" yc="486.0" width="32" height="20" />
+		</text>
+		<text string="-">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="806.1" yc="508.0" width="32" height="20" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="837.5" y="474.0" width="96.6" height="46" />
+		</rect>
+		<text string="Shift">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="885.8" yc="497.0" width="88.6" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="939.1" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="↑">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="965.6" yc="497.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="997.1" y="474.0" width="52.9" height="46" />
+		</rect>
+		<text string="Ende">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="1023.5" yc="497.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="70.0" y="525.0" width="67.4" height="46" />
+		</rect>
+		<text string="Strg">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="103.7" yc="548.0" width="59.4" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="142.4" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="Fn">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="168.9" yc="548.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="200.4" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="Win">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="226.8" yc="548.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="258.3" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="Alt">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="284.8" yc="548.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="316.2" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="&gt;">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="332.0" yc="538.0" width="18" height="16" />
+		</text>
+		<text string="|">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="354.0" yc="538.0" width="12" height="16" />
+		</text>
+		<text string="&lt;">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="332.0" yc="556.0" width="18" height="16" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="374.2" y="525.0" width="197.8" height="46" />
+		</rect>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="577.0" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="AltGr">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="603.5" yc="548.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="634.9" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="Menu">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="661.4" yc="548.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="692.9" y="525.0" width="67.4" height="46" />
+		</rect>
+		<text string="Strg">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="726.6" yc="548.0" width="59.4" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="765.3" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="Einfg">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="791.8" yc="548.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="823.2" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="Entf">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="849.7" yc="548.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="881.2" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="←">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="907.6" yc="548.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="939.1" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="↓">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="965.6" yc="548.0" width="44.9" height="25.3" />
+		</text>
+		<rect>
+			<color red="0.12" green="0.12" blue="0.12" />
+			<bounds x="997.1" y="525.0" width="52.9" height="46" />
+		</rect>
+		<text string="→">
+			<color red="0.92" green="0.91" blue="0.87" />
+			<bounds xc="1023.5" yc="548.0" width="44.9" height="25.3" />
+		</text>
+	</element>
+
+	<view name="HomeComputer 6502">
+		<element ref="hc_case">
+			<bounds x="0" y="0" width="1120" height="640" />
+		</element>
+
+		<repeat count="6">
+			<param name="gy" start="63" increment="26" />
+			<repeat count="5">
+				<param name="gx" start="70" increment="26" />
+				<element ref="hc_grille">
+					<bounds x="~gx~" y="~gy~" width="16" height="16" />
+				</element>
+			</repeat>
+		</repeat>
+		<repeat count="6">
+			<param name="gy2" start="63" increment="26" />
+			<repeat count="5">
+				<param name="gx2" start="920" increment="26" />
+				<element ref="hc_grille">
+					<bounds x="~gx2~" y="~gy2~" width="16" height="16" />
+				</element>
+			</repeat>
+		</repeat>
+
+		<!-- status LED, replaces the top-right hole of the right speaker grille (x=920+4*26=1024, y=63) -->
+		<element ref="hc_led" name="led0">
+			<bounds x="1024" y="63" width="16" height="16" />
+		</element>
+
+		<!-- native screen is 240x36 px. Inset 4px so the blue window shows as a rim
+		     and the glyphs do not sit on the orange edge. -->
+		<screen index="0">
+			<bounds x="274" y="70" width="572" height="132" />
+		</screen>
+
+		<element ref="hc_keyboard">
+			<bounds x="0" y="0" width="1120" height="640" />
+		</element>
+
+		<!-- clickable overlay: one transparent/highlight rect per key, bound to its ROWn ioport bit -->
+		<element ref="hc_key" inputtag="ROW0" inputmask="0x20">
+			<bounds x="70.0" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW12" inputmask="0x80">
+			<bounds x="127.9" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW1" inputmask="0x04">
+			<bounds x="185.9" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW1" inputmask="0x80">
+			<bounds x="243.8" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW1" inputmask="0x20">
+			<bounds x="301.8" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW9" inputmask="0x20">
+			<bounds x="359.7" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW4" inputmask="0x20">
+			<bounds x="417.6" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW10" inputmask="0x80">
+			<bounds x="475.6" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW12" inputmask="0x20">
+			<bounds x="533.5" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW9" inputmask="0x04">
+			<bounds x="591.5" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW9" inputmask="0x01">
+			<bounds x="649.4" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW12" inputmask="0x01">
+			<bounds x="707.4" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW8" inputmask="0x01">
+			<bounds x="765.3" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW12" inputmask="0x40">
+			<bounds x="823.2" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW6" inputmask="0x01">
+			<bounds x="881.2" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW6" inputmask="0x08">
+			<bounds x="939.1" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW7" inputmask="0x40">
+			<bounds x="997.1" y="270.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW0" inputmask="0x04">
+			<bounds x="70.0" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW0" inputmask="0x01">
+			<bounds x="131.1" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW12" inputmask="0x02">
+			<bounds x="192.2" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW1" inputmask="0x01">
+			<bounds x="253.3" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW2" inputmask="0x01">
+			<bounds x="314.4" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW2" inputmask="0x04">
+			<bounds x="375.5" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW3" inputmask="0x04">
+			<bounds x="436.6" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW3" inputmask="0x01">
+			<bounds x="497.7" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW4" inputmask="0x01">
+			<bounds x="558.8" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW12" inputmask="0x08">
+			<bounds x="619.9" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW5" inputmask="0x01">
+			<bounds x="681.0" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW5" inputmask="0x04">
+			<bounds x="742.1" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW4" inputmask="0x04">
+			<bounds x="803.2" y="321.0" width="56.1" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW9" inputmask="0x80">
+			<bounds x="864.3" y="321.0" width="127.8" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW7" inputmask="0x04">
+			<bounds x="997.1" y="321.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW0" inputmask="0x80">
+			<bounds x="70.0" y="372.0" width="125.4" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW0" inputmask="0x08">
+			<bounds x="200.4" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW8" inputmask="0x08">
+			<bounds x="258.4" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW1" inputmask="0x08">
+			<bounds x="316.3" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW2" inputmask="0x08">
+			<bounds x="374.2" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW2" inputmask="0x80">
+			<bounds x="432.2" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW3" inputmask="0x80">
+			<bounds x="490.1" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW3" inputmask="0x08">
+			<bounds x="548.1" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW4" inputmask="0x08">
+			<bounds x="606.0" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW10" inputmask="0x08">
+			<bounds x="663.9" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW5" inputmask="0x08">
+			<bounds x="721.9" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW5" inputmask="0x80">
+			<bounds x="779.8" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW4" inputmask="0x80">
+			<bounds x="837.8" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW9" inputmask="0x40">
+			<bounds x="895.7" y="372.0" width="96.4" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW10" inputmask="0x04">
+			<bounds x="997.1" y="372.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW8" inputmask="0x80">
+			<bounds x="70.0" y="423.0" width="139.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW0" inputmask="0x02">
+			<bounds x="214.9" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW8" inputmask="0x02">
+			<bounds x="272.8" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW1" inputmask="0x02">
+			<bounds x="330.8" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW2" inputmask="0x02">
+			<bounds x="388.7" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW2" inputmask="0x20">
+			<bounds x="446.7" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW3" inputmask="0x20">
+			<bounds x="504.6" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW3" inputmask="0x02">
+			<bounds x="562.5" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW4" inputmask="0x02">
+			<bounds x="620.5" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW10" inputmask="0x02">
+			<bounds x="678.4" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW5" inputmask="0x02">
+			<bounds x="736.4" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW5" inputmask="0x20">
+			<bounds x="794.3" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW5" inputmask="0x40">
+			<bounds x="852.3" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW9" inputmask="0x40">
+			<bounds x="910.2" y="423.0" width="81.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW10" inputmask="0x01">
+			<bounds x="997.1" y="423.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW11" inputmask="0x80">
+			<bounds x="70.0" y="474.0" width="183.5" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW0" inputmask="0x40">
+			<bounds x="258.5" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW8" inputmask="0x40">
+			<bounds x="316.4" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW1" inputmask="0x40">
+			<bounds x="374.3" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW2" inputmask="0x40">
+			<bounds x="432.2" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW2" inputmask="0x10">
+			<bounds x="490.1" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW3" inputmask="0x10">
+			<bounds x="548.0" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW3" inputmask="0x40">
+			<bounds x="605.9" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW4" inputmask="0x40">
+			<bounds x="663.8" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW10" inputmask="0x40">
+			<bounds x="721.7" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW5" inputmask="0x10">
+			<bounds x="779.6" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW11" inputmask="0x40">
+			<bounds x="837.5" y="474.0" width="96.6" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW7" inputmask="0x20">
+			<bounds x="939.1" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW7" inputmask="0x01">
+			<bounds x="997.1" y="474.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW13" inputmask="0x04">
+			<bounds x="70.0" y="525.0" width="67.4" height="46" />
+		</element>
+		<!-- Fn and Win both need to fire the Fn+Win hard-reset chord (see fn_win_reset() in
+		     homecomputer6502.cpp) from a single click. A clickable item only fires if its
+		     inputmask exactly matches one ioport_field's mask (see render.cpp
+		     render_target::update_pointer_fields()/pointer_updated(): port->field(mask) is an
+		     exact-match lookup), and RESET has two separate 1-bit fields (0x01 and 0x02) - no
+		     field has mask 0x03 - so each keycap needs two stacked overlays, one per bit,
+		     rather than a single item with the combined mask.
+		     clickthrough="yes" is required on both: an item with an inputtag defaults to
+		     clickthrough="no" (see resolve_tags()), which makes it "obscure" the pointer for
+		     any item stacked underneath (render.cpp update_pointer_fields(): the topmost hit
+		     item sets a per-pointer "obscured" bit that suppresses hits on lower items) - so
+		     without this, only the topmost of each stacked pair would ever actually fire. -->
+		<element ref="hc_key" inputtag="RESET" inputmask="0x01" clickthrough="yes">
+			<bounds x="142.4" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="RESET" inputmask="0x02" clickthrough="yes">
+			<bounds x="142.4" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="RESET" inputmask="0x01" clickthrough="yes">
+			<bounds x="200.4" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="RESET" inputmask="0x02" clickthrough="yes">
+			<bounds x="200.4" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW6" inputmask="0x20">
+			<bounds x="258.3" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW8" inputmask="0x20">
+			<bounds x="316.2" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW9" inputmask="0x10">
+			<bounds x="374.2" y="525.0" width="197.8" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW6" inputmask="0x10">
+			<bounds x="577.0" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW7" inputmask="0x80">
+			<bounds x="634.9" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW13" inputmask="0x40">
+			<bounds x="692.9" y="525.0" width="67.4" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW8" inputmask="0x04">
+			<bounds x="765.3" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW12" inputmask="0x04">
+			<bounds x="823.2" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW7" inputmask="0x10">
+			<bounds x="881.2" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW12" inputmask="0x10">
+			<bounds x="939.1" y="525.0" width="52.9" height="46" />
+		</element>
+		<element ref="hc_key" inputtag="ROW8" inputmask="0x10">
+			<bounds x="997.1" y="525.0" width="52.9" height="46" />
+		</element>
+
+	</view>
+
+</mamelayout>

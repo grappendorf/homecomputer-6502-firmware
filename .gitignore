@@ -1,0 +1,18 @@
+.idea/
+# Full MAME source checkout. Not part of this repo. scripts/run-mame.sh uses it by default.
+/mame/
+/build/
+*.o
+*.s
+*.lst
+!mame-extensions/src/*.lst
+*.map
+firmware
+mame-extensions/roms/homecomputer6502/firmware.bin
+
+# Runtime artifacts MAME writes into the current directory (-log, -cfg_directory,
+# -snapshot_directory defaults) when run via scripts/run-mame.sh from here
+/cfg/
+/error.log
+/snap/
+
